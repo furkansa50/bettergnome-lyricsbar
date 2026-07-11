@@ -41,6 +41,7 @@ const syncedLookup = {
     { timeMs: 1000, text: 'Look at the stars' },
     { timeMs: 4500, text: 'Look how they shine for you' },
   ],
+  wordLines: [],
   plainText: 'Look at the stars\nLook how they shine for you',
 };
 
@@ -60,6 +61,8 @@ describe('displayStateFromLookup', () => {
     expect(displayStateFromLookup(snapshot({}), syncedLookup)).toEqual({
       kind: 'lyrics',
       line: 'Look at the stars',
+      words: [],
+      activeWordIndex: -1,
       track: { title: 'Yellow', artist: 'Coldplay' },
     });
   });
@@ -70,12 +73,16 @@ describe('displayStateFromLookup', () => {
         previousState: {
           kind: 'lyrics',
           line: 'Look how they shine for you',
+          words: [],
+          activeWordIndex: -1,
           track: { title: 'Yellow', artist: 'Coldplay' },
         },
       }),
     ).toEqual({
       kind: 'lyrics',
       line: 'Look how they shine for you',
+      words: [],
+      activeWordIndex: -1,
       track: { title: 'Yellow', artist: 'Coldplay' },
     });
   });
@@ -86,12 +93,16 @@ describe('displayStateFromLookup', () => {
         previousState: {
           kind: 'lyrics',
           line: 'Look how they shine for you',
+          words: [],
+          activeWordIndex: -1,
           track: { title: 'Yellow', artist: 'Coldplay' },
         },
       }),
     ).toEqual({
       kind: 'lyrics',
       line: 'Look at the stars',
+      words: [],
+      activeWordIndex: -1,
       track: { title: 'Clocks', artist: 'Coldplay' },
     });
   });
@@ -102,12 +113,16 @@ describe('displayStateFromLookup', () => {
         previousState: {
           kind: 'lyrics',
           line: 'Look how they shine for you',
+          words: [],
+          activeWordIndex: -1,
           track: { title: 'Yellow', artist: 'Coldplay' },
         },
       }),
     ).toEqual({
       kind: 'lyrics',
       line: 'Look how they shine for you',
+      words: [],
+      activeWordIndex: -1,
       track: { title: 'Yellow', artist: 'Coldplay' },
     });
   });
@@ -122,6 +137,8 @@ describe('displayStateFromLookup', () => {
     ).toEqual({
       kind: 'lyrics',
       line: 'Plain fallback line',
+      words: [],
+      activeWordIndex: -1,
       track: { title: 'Yellow', artist: 'Coldplay' },
     });
   });
@@ -141,6 +158,8 @@ describe('displayStateFromLookup', () => {
     ).toEqual({
       kind: 'lyrics',
       line: 'First real line',
+      words: [],
+      activeWordIndex: -1,
       track: { title: 'Yellow', artist: 'Coldplay' },
     });
   });
@@ -187,6 +206,8 @@ describe('displayStateFromSyncedPosition', () => {
     expect(displayStateFromSyncedPosition(snapshot({}), syncedLookup, 5000)).toEqual({
       kind: 'lyrics',
       line: 'Look how they shine for you',
+      words: [],
+      activeWordIndex: -1,
       track: { title: 'Yellow', artist: 'Coldplay' },
     });
   });
@@ -195,11 +216,71 @@ describe('displayStateFromSyncedPosition', () => {
     expect(displayStateFromSyncedPosition(snapshot({}), syncedLookup, 500)).toEqual({
       kind: 'lyrics',
       line: 'Look at the stars',
+      words: [],
+      activeWordIndex: -1,
       track: { title: 'Yellow', artist: 'Coldplay' },
     });
   });
 
   it('returns idle when player is missing', () => {
     expect(displayStateFromSyncedPosition(null, syncedLookup, 5000)).toEqual({ kind: 'idle' });
+  });
+
+  it('selects correct word index and active word info with word-timed lines', () => {
+    const wordTimedLookup = {
+      kind: 'synced',
+      track: {
+        trackName: 'Yellow',
+        artistName: 'Coldplay',
+        albumName: 'Parachutes',
+        durationMs: 266773,
+      },
+      lines: [
+        { timeMs: 1000, text: 'Look at the stars' },
+        { timeMs: 4500, text: 'Look how they shine for you' },
+      ],
+      wordLines: [
+        {
+          timeMs: 1000,
+          endMs: 4000,
+          text: 'Look at the stars',
+          words: [
+            { beginMs: 1000, endMs: 1500, text: 'Look' },
+            { beginMs: 1500, endMs: 2000, text: 'at' },
+            { beginMs: 2000, endMs: 2500, text: 'the' },
+            { beginMs: 2500, endMs: 3500, text: 'stars' },
+          ],
+        },
+      ],
+      plainText: 'Look at the stars\nLook how they shine for you',
+    };
+
+    // Position is within the first word
+    expect(displayStateFromSyncedPosition(snapshot({}), wordTimedLookup, 1200)).toEqual({
+      kind: 'lyrics',
+      line: 'Look at the stars',
+      words: wordTimedLookup.wordLines[0].words,
+      activeWordIndex: 0,
+      track: { title: 'Yellow', artist: 'Coldplay' },
+    });
+
+    // Position is within the second word
+    expect(displayStateFromSyncedPosition(snapshot({}), wordTimedLookup, 1700)).toEqual({
+      kind: 'lyrics',
+      line: 'Look at the stars',
+      words: wordTimedLookup.wordLines[0].words,
+      activeWordIndex: 1,
+      track: { title: 'Yellow', artist: 'Coldplay' },
+    });
+
+    // Position is after the endMs of the line (4000) but before the next line (4500)
+    // It should fall back to plain lyrics behavior for this line because the word timing active period is over.
+    expect(displayStateFromSyncedPosition(snapshot({}), wordTimedLookup, 4200)).toEqual({
+      kind: 'lyrics',
+      line: 'Look at the stars',
+      words: [],
+      activeWordIndex: -1,
+      track: { title: 'Yellow', artist: 'Coldplay' },
+    });
   });
 });

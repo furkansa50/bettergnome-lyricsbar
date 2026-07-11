@@ -7,6 +7,7 @@ import { BLACK_TEXT_COLOR, DEFAULT_TEXT_SHADOW, WHITE_TEXT_COLOR } from '../sett
  *   textColorMode: import('../settings/types.js').TextColorMode,
  *   customTextColor: string,
  *   textShadowEnabled: boolean,
+ *   words?: readonly import('../lyrics/types.js').WordTiming[],
  * }} LabelStyleOptions
  */
 
@@ -27,7 +28,8 @@ export function buildLabelStyleString(options) {
     style += ` color: ${options.customTextColor};`;
   }
 
-  if (options.textShadowEnabled) {
+  const hasWordTimings = options.words && options.words.length > 0;
+  if (options.textShadowEnabled && !hasWordTimings) {
     style += ` text-shadow: ${DEFAULT_TEXT_SHADOW};`;
   } else {
     style += ' text-shadow: none;';

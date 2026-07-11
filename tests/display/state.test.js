@@ -137,6 +137,43 @@ describe('formatDisplayState', () => {
       visible: true,
     });
   });
+
+  it('formats word-timed lines with active and inactive spans without forcing foreground color', () => {
+    const words = [
+      { beginMs: 1000, endMs: 1500, text: 'Look' },
+      { beginMs: 1500, endMs: 2000, text: 'at' },
+    ];
+
+    expect(
+      formatDisplayState(
+        {
+          kind: 'lyrics',
+          line: 'Look at',
+          words,
+          activeWordIndex: 0,
+        },
+        'track',
+      ),
+    ).toEqual({
+      text: '<span weight="bold">Look</span> <span alpha="35%">at</span>',
+      visible: true,
+    });
+
+    expect(
+      formatDisplayState(
+        {
+          kind: 'lyrics',
+          line: 'Look at',
+          words,
+          activeWordIndex: 1,
+        },
+        'track',
+      ),
+    ).toEqual({
+      text: '<span alpha="35%">Look</span> <span weight="bold">at</span>',
+      visible: true,
+    });
+  });
 });
 
 describe('formatTrackText', () => {

@@ -2,7 +2,7 @@ import { selectLyricLine } from '../lyrics/lrc.js';
 
 /**
  * @import { PlayerSnapshot } from '../mpris/types.js'
- * @import { LyricsProviderResult } from '../lyrics/types.js'
+ * @import { LyricsProviderResult, WordTimedLyricLine } from '../lyrics/types.js'
  * @import { DisplayState, DisplayTrack } from './types.js'
  *
  * @typedef {Readonly<{
@@ -36,9 +36,21 @@ export function displayStateFromLookup(player, lookup, options = {}) {
       ) {
         return options.previousState;
       }
-      return { kind: 'lyrics', line: extractFirstSyncedLine(lookup), track };
+      return {
+        kind: 'lyrics',
+        line: extractFirstSyncedLine(lookup),
+        words: [],
+        activeWordIndex: -1,
+        track,
+      };
     case 'plain':
-      return { kind: 'lyrics', line: extractFirstPlainLine(lookup), track };
+      return {
+        kind: 'lyrics',
+        line: extractFirstPlainLine(lookup),
+        words: [],
+        activeWordIndex: -1,
+        track,
+      };
     case 'instrumental':
       return { kind: 'track', track };
     case 'not-found':
@@ -60,6 +72,9 @@ function sameDisplayTrack(left, right) {
 }
 
 /**
+ * Build a display state from a synced position, including word-level
+ * highlight data when word timing is available.
+ *
  * @param {PlayerSnapshot | null | undefined} player
  * @param {Extract<LyricsProviderResult, { kind: 'synced' }>} lookup
  * @param {number} positionMs
@@ -74,10 +89,73 @@ export function displayStateFromSyncedPosition(player, lookup, positionMs) {
   const track = { title: player.title, artist: player.artist };
   const line = selectLyricLine(lookup.lines, positionMs);
   if (line !== null && line.text.trim() !== '') {
-    return { kind: 'lyrics', line: line.text, track };
+    // Find matching word-timed line for glow effect
+    const wordLine = findWordTimedLine(lookup.wordLines, positionMs);
+    if (wordLine !== null) {
+      const activeWordIndex = selectActiveWordIndex(wordLine, positionMs);
+      return {
+        kind: 'lyrics',
+        line: line.text,
+        words: wordLine.words,
+        activeWordIndex,
+        track,
+      };
+    }
+    return { kind: 'lyrics', line: line.text, words: [], activeWordIndex: -1, track };
   }
 
   return displayStateFromLookup(player, lookup);
+}
+
+/**
+ * Find the word-timed line that covers the given position.
+ *
+ * @param {readonly WordTimedLyricLine[] | undefined} wordLines
+ * @param {number} positionMs
+ * @returns {WordTimedLyricLine | null}
+ */
+function findWordTimedLine(wordLines, positionMs) {
+  if (!wordLines || wordLines.length === 0) {
+    return null;
+  }
+
+  let current = null;
+  for (const wl of wordLines) {
+    if (wl.timeMs > positionMs) {
+      break;
+    }
+    current = wl;
+  }
+
+  // Check if the position is still within the line's end time
+  if (current !== null && positionMs <= current.endMs) {
+    return current;
+  }
+
+  return null;
+}
+
+/**
+ * Find which word is currently active (being sung) at the given position.
+ *
+ * @param {WordTimedLyricLine} wordLine
+ * @param {number} positionMs
+ * @returns {number}  Index of the active word, or -1 if none.
+ */
+function selectActiveWordIndex(wordLine, positionMs) {
+  const { words } = wordLine;
+  if (words.length === 0) {
+    return -1;
+  }
+
+  for (let i = words.length - 1; i >= 0; i--) {
+    const w = words[i];
+    if (w !== undefined && positionMs >= w.beginMs) {
+      return i;
+    }
+  }
+
+  return -1;
 }
 
 /**

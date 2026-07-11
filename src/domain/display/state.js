@@ -13,6 +13,16 @@ const UNKNOWN_TRACK_TEXT = 'Unknown track';
  */
 
 /**
+ * Helper to escape special XML characters so they don't break Pango markup parsing.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+function escapeMarkup(text) {
+  return String(text).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+/**
  * @param {DisplayState} state
  * @param {FallbackMode} fallbackMode
  * @returns {DisplayText}
@@ -25,7 +35,27 @@ export function formatDisplayState(state, fallbackMode) {
   if (state.kind === 'lyrics') {
     const line = normalizeText(state.line);
     if (line !== '') {
-      return visibleText(line);
+      // If we have word-level timings and a valid highlighted word index
+      if (state.words && state.words.length > 0) {
+        const wordMarkup = state.words.map(
+          /**
+           * @param {import('../lyrics/types.js').WordTiming} w
+           * @param {number} idx
+           */
+          (w, idx) => {
+            const escapedWord = escapeMarkup(w.text);
+            if (idx === state.activeWordIndex) {
+              // Active word: bold
+              return `<span weight="bold">${escapedWord}</span>`;
+            }
+            // Inactive words: translucent/dimmed
+            return `<span alpha="35%">${escapedWord}</span>`;
+          },
+        );
+        return { text: wordMarkup.join(' '), visible: true };
+      }
+
+      return visibleText(escapeMarkup(line));
     }
 
     return formatFallbackTrack(state.track, fallbackMode);
@@ -38,10 +68,10 @@ export function formatDisplayState(state, fallbackMode) {
   if (state.kind === 'loading') {
     const trackText = formatTrackText(state.track);
     if (trackText === null) {
-      return visibleText(DEFAULT_LOADING_PREFIX);
+      return visibleText(escapeMarkup(DEFAULT_LOADING_PREFIX));
     }
 
-    return visibleText(`${DEFAULT_LOADING_PREFIX}: ${trackText}`);
+    return visibleText(`${escapeMarkup(DEFAULT_LOADING_PREFIX)}: ${escapeMarkup(trackText)}`);
   }
 
   if (state.kind === 'error') {
@@ -53,10 +83,10 @@ export function formatDisplayState(state, fallbackMode) {
       return formatFallbackTrack(state.track, fallbackMode);
     }
 
-    return visibleText(DEFAULT_ERROR_TEXT);
+    return visibleText(escapeMarkup(DEFAULT_ERROR_TEXT));
   }
 
-  return fallbackMode === 'hidden' ? hiddenText() : visibleText(DEFAULT_IDLE_TEXT);
+  return fallbackMode === 'hidden' ? hiddenText() : visibleText(escapeMarkup(DEFAULT_IDLE_TEXT));
 }
 
 /**
@@ -70,10 +100,10 @@ function formatFallbackTrack(track, fallbackMode) {
   }
 
   if (fallbackMode === 'idle') {
-    return visibleText(DEFAULT_IDLE_TEXT);
+    return visibleText(escapeMarkup(DEFAULT_IDLE_TEXT));
   }
 
-  return visibleText(formatTrackText(track) ?? UNKNOWN_TRACK_TEXT);
+  return visibleText(escapeMarkup(formatTrackText(track) ?? UNKNOWN_TRACK_TEXT));
 }
 
 /**
