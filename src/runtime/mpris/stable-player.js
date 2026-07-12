@@ -20,6 +20,10 @@ import { snapshotsEqual } from './player-mapping.js';
  *   onSnapshot(callback: PlayerSnapshotCallback): void,
  *   readPosition(callback: PlayerPositionCallback): void,
  *   refreshProperties(): void,
+ *   playPause(): void,
+ *   next(): void,
+ *   previous(): void,
+ *   setPosition(trackId: string | null, positionMs: number): void,
  *   start(): void,
  * }>} RawPlayerProxy
  *
@@ -141,6 +145,44 @@ export class StablePlayerProxy {
    */
   refreshProperties() {
     this.#rawProxy.refreshProperties();
+  }
+
+  /**
+   * Toggle playback on the active player.
+   *
+   * @returns {void}
+   */
+  playPause() {
+    this.#rawProxy.playPause?.();
+  }
+
+  /**
+   * Skip to the next track.
+   *
+   * @returns {void}
+   */
+  next() {
+    this.#rawProxy.next?.();
+  }
+
+  /**
+   * Skip to the previous track.
+   *
+   * @returns {void}
+   */
+  previous() {
+    this.#rawProxy.previous?.();
+  }
+
+  /**
+   * Seek to an absolute position on the active player.
+   *
+   * @param {string | null} trackId
+   * @param {number} positionMs
+   * @returns {void}
+   */
+  setPosition(trackId, positionMs) {
+    this.#rawProxy.setPosition?.(trackId, positionMs);
   }
 
   /**

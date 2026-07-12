@@ -10,6 +10,8 @@ import {
   normalizeTextAlign,
   normalizeTextColorMode,
   normalizeCustomTextColor,
+  normalizeGlowStrength,
+  normalizeLyricsSource,
 } from '../../src/domain/settings/normalize.js';
 
 describe('normalizeSettings', () => {
@@ -23,11 +25,13 @@ describe('normalizeSettings', () => {
         showSettingsIcon: false,
         playerPriority: ['spotify', 'firefox'],
         browserPlayerService: 'generic',
+        lyricsSource: 'better-lyrics',
         cacheEnabled: false,
         debugLogging: true,
         textColorMode: 'custom',
         customTextColor: '#ff007f',
         textShadowEnabled: false,
+        glowStrength: 1.5,
       }),
     ).toEqual({
       panelPosition: 'left',
@@ -37,11 +41,14 @@ describe('normalizeSettings', () => {
       showSettingsIcon: false,
       playerPriority: ['spotify', 'firefox'],
       browserPlayerService: 'generic',
+      lyricsSource: 'better-lyrics',
       cacheEnabled: false,
       debugLogging: true,
       textColorMode: 'custom',
       customTextColor: '#ff007f',
       textShadowEnabled: false,
+      glowStrength: 1.5,
+      autoWidth: false,
     });
   });
 
@@ -55,11 +62,13 @@ describe('normalizeSettings', () => {
         showSettingsIcon: 'yes',
         playerPriority: 'spotify',
         browserPlayerService: 'bad',
+        lyricsSource: 'unknown-source',
         cacheEnabled: 'yes',
         debugLogging: 'no',
         textColorMode: 'orange',
         customTextColor: 'rgb(255,0,0)',
         textShadowEnabled: 'yes',
+        glowStrength: 'strong',
       }),
     ).toEqual({
       panelPosition: 'center',
@@ -69,11 +78,14 @@ describe('normalizeSettings', () => {
       showSettingsIcon: true,
       playerPriority: ['spotify'],
       browserPlayerService: 'auto',
+      lyricsSource: 'auto',
       cacheEnabled: true,
       debugLogging: false,
       textColorMode: 'default',
       customTextColor: '#ffffff',
       textShadowEnabled: true,
+      glowStrength: 1.0,
+      autoWidth: false,
     });
   });
 });
@@ -171,5 +183,35 @@ describe('normalizeCustomTextColor', () => {
     expect(normalizeCustomTextColor('#1234')).toBe('#ffffff');
     expect(normalizeCustomTextColor('123456')).toBe('#ffffff');
     expect(normalizeCustomTextColor(123)).toBe('#ffffff');
+  });
+});
+
+describe('normalizeGlowStrength', () => {
+  it('accepts valid glow strengths', () => {
+    expect(normalizeGlowStrength(1.2)).toBe(1.2);
+    expect(normalizeGlowStrength(0.5)).toBe(0.5);
+  });
+
+  it('clamps values out of range', () => {
+    expect(normalizeGlowStrength(-0.5)).toBe(0.0);
+    expect(normalizeGlowStrength(3.0)).toBe(2.0);
+  });
+
+  it('rejects invalid input types and returns default', () => {
+    expect(normalizeGlowStrength('strong')).toBe(1.0);
+    expect(normalizeGlowStrength(null)).toBe(1.0);
+  });
+});
+
+describe('normalizeLyricsSource', () => {
+  it('accepts known lyrics sources', () => {
+    expect(normalizeLyricsSource('auto')).toBe('auto');
+    expect(normalizeLyricsSource('better-lyrics')).toBe('better-lyrics');
+    expect(normalizeLyricsSource('lrclib')).toBe('lrclib');
+  });
+
+  it('rejects unknown lyrics sources', () => {
+    expect(normalizeLyricsSource('unknown')).toBe('auto');
+    expect(normalizeLyricsSource(null)).toBe('auto');
   });
 });

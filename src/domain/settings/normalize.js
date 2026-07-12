@@ -13,7 +13,12 @@ const MAX_MAX_WIDTH = 720;
 const DEFAULT_FALLBACK_MODE = 'track';
 const DEFAULT_PLAYER_PRIORITY = ['spotify'];
 const DEFAULT_BROWSER_PLAYER_SERVICE = 'auto';
+const DEFAULT_LYRICS_SOURCE = 'auto';
 const DEFAULT_TEXT_ALIGN = 'left';
+const DEFAULT_AUTO_WIDTH = false;
+const DEFAULT_GLOW_STRENGTH = 1.0;
+const MIN_GLOW_STRENGTH = 0.0;
+const MAX_GLOW_STRENGTH = 2.0;
 
 const PANEL_POSITIONS = new Set(['left', 'center', 'right']);
 const FALLBACK_MODES = new Set(['track', 'idle', 'hidden']);
@@ -24,6 +29,7 @@ const BROWSER_PLAYER_SERVICES = new Set([
   'apple-music',
   'generic',
 ]);
+const LYRICS_SOURCES = new Set(['auto', 'better-lyrics', 'lrclib']);
 const TEXT_ALIGNS = new Set(['left', 'center', 'right']);
 
 /**
@@ -31,6 +37,7 @@ const TEXT_ALIGNS = new Set(['left', 'center', 'right']);
  *   BrowserPlayerService,
  *   FallbackMode,
  *   LyricBarSettings,
+ *   LyricsSource,
  *   PanelPosition,
  *   RawSettings,
  *   TextAlign,
@@ -51,11 +58,14 @@ export function normalizeSettings(raw) {
     showSettingsIcon: normalizeBoolean(raw.showSettingsIcon, true),
     playerPriority: normalizePlayerPriority(raw.playerPriority),
     browserPlayerService: normalizeBrowserPlayerService(raw.browserPlayerService),
+    lyricsSource: normalizeLyricsSource(raw.lyricsSource),
     cacheEnabled: normalizeBoolean(raw.cacheEnabled, true),
     debugLogging: normalizeBoolean(raw.debugLogging, false),
     textColorMode: normalizeTextColorMode(raw.textColorMode),
     customTextColor: normalizeCustomTextColor(raw.customTextColor),
     textShadowEnabled: normalizeBoolean(raw.textShadowEnabled, DEFAULT_TEXT_SHADOW_ENABLED),
+    glowStrength: normalizeGlowStrength(raw.glowStrength),
+    autoWidth: normalizeBoolean(raw.autoWidth, DEFAULT_AUTO_WIDTH),
   };
 }
 
@@ -152,4 +162,25 @@ export function normalizeTextColorMode(value) {
  */
 export function normalizeCustomTextColor(value) {
   return isHexColor(value) ? value.trim() : DEFAULT_CUSTOM_TEXT_COLOR;
+}
+
+/**
+ * @param {unknown} value
+ * @returns {number}
+ */
+export function normalizeGlowStrength(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return DEFAULT_GLOW_STRENGTH;
+  }
+  return Math.min(MAX_GLOW_STRENGTH, Math.max(MIN_GLOW_STRENGTH, value));
+}
+
+/**
+ * @param {unknown} value
+ * @returns {LyricsSource}
+ */
+export function normalizeLyricsSource(value) {
+  return typeof value === 'string' && LYRICS_SOURCES.has(value)
+    ? /** @type {LyricsSource} */ (value)
+    : DEFAULT_LYRICS_SOURCE;
 }

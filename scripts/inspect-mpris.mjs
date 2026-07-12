@@ -23,7 +23,7 @@ line('');
 const shellVersion = runCommand('gnome-shell', ['--version']);
 line(`GNOME Shell: ${singleLine(shellVersion)}`);
 
-const extensionInfo = runCommand('gnome-extensions', ['info', 'lyricbar@fikrilal.github.io']);
+const extensionInfo = runCommand('gnome-extensions', ['info', 'betterlyricsbar@furkansa50']);
 line('Extension:');
 block(extensionInfo.ok ? extensionInfo.stdout.trim() : extensionInfo.stderr.trim());
 

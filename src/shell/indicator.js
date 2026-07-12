@@ -1,16 +1,18 @@
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GObject from 'gi://GObject';
-import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 import { buildLabelStyleString } from '../domain/display/style.js';
+import { buildDetailsMenu } from './details-menu.js';
+import { _t } from '../runtime/i18n.js';
 
 /**
  * @import { IndicatorViewModel } from '../domain/display/view-model.js'
+ * @import { DetailsMenuState, DetailsMenuActions } from './details-menu.js'
  */
 
 class LyricBarIndicatorBase extends PanelMenu.Button {
@@ -18,8 +20,9 @@ class LyricBarIndicatorBase extends PanelMenu.Button {
   _init() {
     super._init(0.0, 'LyricBar');
 
-    this._preferencesAction = null;
-    this._preferencesButtonPressId = 0;
+    this._detailsMenu = null;
+    this._detailsActions = null;
+    this._menuBound = false;
 
     this._lyricBarBox = new St.BoxLayout({
       style_class: 'panel-status-indicators-box lyricbar-container',
@@ -51,7 +54,17 @@ class LyricBarIndicatorBase extends PanelMenu.Button {
 
     setActorVisible(this, viewModel.visible);
     setLabelText(this._lyricBarLabel, viewModel.text);
-    setActorWidth(this._lyricBarLabel, viewModel.maxWidth);
+
+    if (viewModel.autoWidth) {
+      // Allow label to expand naturally up to maxWidth (via CSS max-width)
+      setActorWidth(this._lyricBarLabel, -1);
+      // Pango.EllipsizeMode.NONE = 0
+      setEllipsizeMode(this._lyricBarLabel, 0);
+    } else {
+      setActorWidth(this._lyricBarLabel, viewModel.maxWidth);
+      // Pango.EllipsizeMode.END = 3
+      setEllipsizeMode(this._lyricBarLabel, 3);
+    }
 
     const style = buildLabelStyleString(viewModel);
     setActorStyle(this._lyricBarLabel, style);
@@ -64,43 +77,40 @@ class LyricBarIndicatorBase extends PanelMenu.Button {
   }
 
   /**
-   * @param {(() => void) | null} callback
+   * Wire the playback control actions and build the details popup section.
+   * Safe to call once during indicator mount.
+   *
+   * @param {DetailsMenuActions} actions
    * @returns {void}
    */
-  setPreferencesAction(callback) {
-    this._disconnectPreferencesAction();
-    this._preferencesAction = callback;
-
-    if (callback === null) {
-      return;
+  setDetailsActions(actions) {
+    this._detailsActions = actions;
+    if (this._detailsMenu === null && this.menu) {
+      this._detailsMenu = buildDetailsMenu(this.menu, actions);
+      this.menu.addMenuItem(this._detailsMenu.section);
+      this._menuBound = true;
     }
+  }
 
-    this._preferencesButtonPressId = this.connect('button-press-event', () => {
-      this._preferencesAction?.();
-      return true;
-    });
+  /**
+   * Update the details popup contents. No-op if the menu has not been wired.
+   *
+   * @param {DetailsMenuState} state
+   * @returns {void}
+   */
+  renderDetails(state) {
+    this._detailsMenu?.update(state);
   }
 
   /** @override */
   destroy() {
-    this._disconnectPreferencesAction();
+    this._detailsMenu?.destroy();
+    this._detailsMenu = null;
+    this._detailsActions = null;
     this._lyricBarLabel = null;
     this._lyricBarBin = null;
     this._lyricBarBox = null;
-    this._preferencesAction = null;
     super.destroy();
-  }
-
-  /**
-   * @returns {void}
-   */
-  _disconnectPreferencesAction() {
-    if (this._preferencesButtonPressId === 0) {
-      return;
-    }
-    const signalId = /** @type {number} */ (this._preferencesButtonPressId);
-    this.disconnect(signalId);
-    this._preferencesButtonPressId = 0;
   }
 }
 
@@ -115,7 +125,7 @@ class LyricBarSettingsIndicatorBase extends PanelMenu.Button {
    * @param {any} extension
    */
   _init(settings, extension) {
-    super._init(0.0, 'LyricBar Settings', false);
+    super._init(0.0, 'Better Lyrics Settings', false);
 
     this.add_style_class_name('lyricbar-settings-button');
 
@@ -129,19 +139,22 @@ class LyricBarSettingsIndicatorBase extends PanelMenu.Button {
     this.add_child(this._icon);
 
     // Panel Position Submenu
-    this._positionSubMenu = new PopupMenu.PopupSubMenuMenuItem('Panel Position', false);
+    this._positionSubMenu = new PopupMenu.PopupSubMenuMenuItem(
+      _t('Panel Position', 'Panel Konumu'),
+      false,
+    );
 
-    this._leftItem = new PopupMenu.PopupMenuItem('Left');
+    this._leftItem = new PopupMenu.PopupMenuItem(_t('Left', 'Sol'));
     this._leftActivatedId = this._leftItem.connect('activate', () => {
       settings.set_string('panel-position', 'left');
     });
 
-    this._centerItem = new PopupMenu.PopupMenuItem('Center');
+    this._centerItem = new PopupMenu.PopupMenuItem(_t('Center', 'Orta'));
     this._centerActivatedId = this._centerItem.connect('activate', () => {
       settings.set_string('panel-position', 'center');
     });
 
-    this._rightItem = new PopupMenu.PopupMenuItem('Right');
+    this._rightItem = new PopupMenu.PopupMenuItem(_t('Right', 'Sağ'));
     this._rightActivatedId = this._rightItem.connect('activate', () => {
       settings.set_string('panel-position', 'right');
     });
@@ -160,19 +173,22 @@ class LyricBarSettingsIndicatorBase extends PanelMenu.Button {
     });
 
     // Text Alignment Submenu
-    this._alignSubMenu = new PopupMenu.PopupSubMenuMenuItem('Text Alignment', false);
+    this._alignSubMenu = new PopupMenu.PopupSubMenuMenuItem(
+      _t('Text Alignment', 'Metin Hizalama'),
+      false,
+    );
 
-    this._alignLeftItem = new PopupMenu.PopupMenuItem('Left');
+    this._alignLeftItem = new PopupMenu.PopupMenuItem(_t('Left', 'Sol'));
     this._alignLeftActivatedId = this._alignLeftItem.connect('activate', () => {
       settings.set_string('text-align', 'left');
     });
 
-    this._alignCenterItem = new PopupMenu.PopupMenuItem('Center');
+    this._alignCenterItem = new PopupMenu.PopupMenuItem(_t('Center', 'Orta'));
     this._alignCenterActivatedId = this._alignCenterItem.connect('activate', () => {
       settings.set_string('text-align', 'center');
     });
 
-    this._alignRightItem = new PopupMenu.PopupMenuItem('Right');
+    this._alignRightItem = new PopupMenu.PopupMenuItem(_t('Right', 'Sağ'));
     this._alignRightActivatedId = this._alignRightItem.connect('activate', () => {
       settings.set_string('text-align', 'right');
     });
@@ -195,7 +211,9 @@ class LyricBarSettingsIndicatorBase extends PanelMenu.Button {
     this.menu.addMenuItem(this._separator);
 
     // Full Preferences link
-    this._prefsItem = new PopupMenu.PopupMenuItem('LyricBar Preferences');
+    this._prefsItem = new PopupMenu.PopupMenuItem(
+      _t('Better Lyrics Preferences', 'Better Lyrics Ayarları'),
+    );
     this._prefsActivatedId = this._prefsItem.connect('activate', () => {
       extension.openPreferences();
     });
@@ -297,6 +315,20 @@ function setActorVisible(actor, visible) {
  * @returns {void}
  */
 function setLabelText(label, text) {
+  const clutterText = Reflect.get(label, 'clutter_text');
+  if (clutterText !== null && clutterText !== undefined) {
+    try {
+      Reflect.set(/** @type {object} */ (clutterText), 'use_markup', true);
+      const setMarkup = Reflect.get(/** @type {object} */ (clutterText), 'set_markup');
+      if (typeof setMarkup === 'function') {
+        setMarkup.call(clutterText, text);
+        return;
+      }
+    } catch {
+      // Ignore errors and fall back to plain text
+    }
+  }
+
   Reflect.set(label, 'text', text);
 
   const setter = Reflect.get(label, 'set_text');
@@ -304,7 +336,6 @@ function setLabelText(label, text) {
     setter.call(label, text);
   }
 
-  const clutterText = Reflect.get(label, 'clutter_text');
   const clutterSetter = Reflect.get(/** @type {object} */ (clutterText), 'set_text');
   if (typeof clutterSetter === 'function') {
     clutterSetter.call(clutterText, text);
@@ -341,6 +372,26 @@ function setActorWidth(actor, width) {
 
 /**
  * @param {InstanceType<typeof St.Label>} label
+ * @param {number} mode  // Pango.EllipsizeMode: 0=NONE, 3=END
+ * @returns {void}
+ */
+function setEllipsizeMode(label, mode) {
+  const clutterText = Reflect.get(label, 'clutter_text');
+  if (clutterText === null || clutterText === undefined) {
+    return;
+  }
+
+  const setEllipsize = Reflect.get(/** @type {object} */ (clutterText), 'set_ellipsize');
+  if (typeof setEllipsize === 'function') {
+    setEllipsize.call(clutterText, mode);
+    return;
+  }
+
+  Reflect.set(/** @type {object} */ (clutterText), 'ellipsize', mode);
+}
+
+/**
+ * @param {InstanceType<typeof St.Label>} label
  * @returns {void}
  */
 function setSingleLineMode(label) {
@@ -353,14 +404,6 @@ function setSingleLineMode(label) {
   if (typeof setSingleLine === 'function') {
     setSingleLine.call(clutterText, true);
   }
-
-  const setEllipsize = Reflect.get(/** @type {object} */ (clutterText), 'set_ellipsize');
-  if (typeof setEllipsize === 'function') {
-    setEllipsize.call(clutterText, Pango.EllipsizeMode.END);
-    return;
-  }
-
-  Reflect.set(/** @type {object} */ (clutterText), 'ellipsize', Pango.EllipsizeMode.END);
 }
 
 /**
@@ -407,11 +450,12 @@ function setLabelAlignment(label, align) {
 
   const clutterText = Reflect.get(label, 'clutter_text');
   if (clutterText !== null && clutterText !== undefined) {
-    let pangoAlign = Pango.Alignment.LEFT;
+    // Pango.Alignment: 0=LEFT, 1=CENTER, 2=RIGHT
+    let pangoAlign = 0;
     if (align === 'center') {
-      pangoAlign = Pango.Alignment.CENTER;
+      pangoAlign = 1;
     } else if (align === 'right') {
-      pangoAlign = Pango.Alignment.RIGHT;
+      pangoAlign = 2;
     }
 
     // Set line_alignment on the Clutter.Text actor to align text inside the label

@@ -5,6 +5,19 @@
  * }>} LyricLine
  *
  * @typedef {Readonly<{
+ *   beginMs: number,
+ *   endMs: number,
+ *   text: string,
+ * }>} WordTiming
+ *
+ * @typedef {Readonly<{
+ *   timeMs: number,
+ *   endMs: number,
+ *   text: string,
+ *   words: readonly WordTiming[],
+ * }>} WordTimedLyricLine
+ *
+ * @typedef {Readonly<{
  *   artist?: string | null,
  *   title?: string | null,
  *   album?: string | null,
@@ -29,6 +42,7 @@
  *   kind: 'synced',
  *   track: ProviderTrackInfo,
  *   lines: readonly LyricLine[],
+ *   wordLines: readonly WordTimedLyricLine[],
  *   plainText: string,
  * }>} SyncedLyricsResult
  *

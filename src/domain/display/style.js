@@ -1,12 +1,14 @@
-import { BLACK_TEXT_COLOR, DEFAULT_TEXT_SHADOW, WHITE_TEXT_COLOR } from '../settings/appearance.js';
+import { BLACK_TEXT_COLOR, WHITE_TEXT_COLOR } from '../settings/appearance.js';
 
 /**
  * @typedef {{
  *   maxWidth: number,
+ *   autoWidth: boolean,
  *   textAlign: import('../settings/types.js').TextAlign,
  *   textColorMode: import('../settings/types.js').TextColorMode,
  *   customTextColor: string,
  *   textShadowEnabled: boolean,
+ *   glowStrength: number,
  *   words?: readonly import('../lyrics/types.js').WordTiming[],
  * }} LabelStyleOptions
  */
@@ -18,7 +20,13 @@ import { BLACK_TEXT_COLOR, DEFAULT_TEXT_SHADOW, WHITE_TEXT_COLOR } from '../sett
  * @returns {string} The CSS style string.
  */
 export function buildLabelStyleString(options) {
-  let style = `width: ${options.maxWidth}px; min-width: 1px; text-align: ${options.textAlign};`;
+  let style = '';
+  if (options.autoWidth) {
+    // min-width: 0 allows the label to shrink below maxWidth when content is short
+    style = `max-width: ${options.maxWidth}px; min-width: 0; text-align: ${options.textAlign};`;
+  } else {
+    style = `width: ${options.maxWidth}px; min-width: 1px; text-align: ${options.textAlign};`;
+  }
 
   if (options.textColorMode === 'default' || options.textColorMode === 'white') {
     style += ` color: ${WHITE_TEXT_COLOR};`;
@@ -28,12 +36,25 @@ export function buildLabelStyleString(options) {
     style += ` color: ${options.customTextColor};`;
   }
 
-  const hasWordTimings = options.words && options.words.length > 0;
-  if (options.textShadowEnabled && !hasWordTimings) {
-    style += ` text-shadow: ${DEFAULT_TEXT_SHADOW};`;
+  if (options.textShadowEnabled) {
+    style += ` text-shadow: ${buildTextShadowString(options.glowStrength)};`;
   } else {
     style += ' text-shadow: none;';
   }
 
   return style;
+}
+
+/**
+ * @param {number} strength
+ * @returns {string}
+ */
+export function buildTextShadowString(strength) {
+  if (strength <= 0) {
+    return 'none';
+  }
+  const s1 = Number(Math.min(1.0, 0.6 * strength).toFixed(2)).toString();
+  const s2 = Number(Math.min(1.0, 0.4 * strength).toFixed(2)).toString();
+  const s3 = Number(Math.min(1.0, 0.2 * strength).toFixed(2)).toString();
+  return `0 0 8px rgba(255, 255, 255, ${s1}), 0 0 16px rgba(255, 255, 255, ${s2}), 0 0 24px rgba(255, 255, 255, ${s3})`;
 }

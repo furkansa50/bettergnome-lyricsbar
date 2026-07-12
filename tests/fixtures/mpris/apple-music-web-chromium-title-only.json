@@ -29,6 +29,7 @@
     "durationMs": 189515,
     "trackId": "/org/chromium/MediaPlayer2/TrackList/TrackTitleOnly",
     "playbackStatus": "Playing",
-    "url": null
+    "url": null,
+    "artUrl": "file:///tmp/.com.google.Chrome.title-only"
   }
 }

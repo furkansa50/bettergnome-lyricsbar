@@ -20,11 +20,14 @@ describe('SettingsAdapter', () => {
       showSettingsIcon: true,
       playerPriority: ['spotify'],
       browserPlayerService: 'auto',
+      lyricsSource: 'auto',
       cacheEnabled: true,
       debugLogging: false,
       textColorMode: 'default',
       customTextColor: '#ffffff',
       textShadowEnabled: true,
+      glowStrength: 1.0,
+      autoWidth: false,
     });
   });
 
@@ -36,16 +39,16 @@ describe('SettingsAdapter', () => {
 
     adapter.subscribe(callback);
 
-    expect(backend.connect).toHaveBeenCalledTimes(12);
+    expect(backend.connect).toHaveBeenCalledTimes(15);
     backend.emit('changed::max-width');
 
     expect(callback).toHaveBeenCalledWith(adapter.read());
 
     lifecycle.dispose();
 
-    expect(backend.disconnect).toHaveBeenCalledTimes(12);
-    expect(backend.disconnect).toHaveBeenNthCalledWith(1, 12);
-    expect(backend.disconnect).toHaveBeenNthCalledWith(12, 1);
+    expect(backend.disconnect).toHaveBeenCalledTimes(15);
+    expect(backend.disconnect).toHaveBeenNthCalledWith(1, 15);
+    expect(backend.disconnect).toHaveBeenNthCalledWith(15, 1);
   });
 });
 
@@ -82,6 +85,7 @@ function createSettingsBackend(overrides = {}) {
     }),
     get_int: vi.fn(() => 360),
     get_strv: vi.fn(() => ['spotify']),
+    get_double: vi.fn(() => 1.0),
     get_boolean: vi.fn(
       (key) =>
         key === 'cache-enabled' || key === 'show-settings-icon' || key === 'style-text-shadow',

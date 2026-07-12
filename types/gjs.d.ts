@@ -74,7 +74,13 @@ declare module 'gi://Soup' {
 
 declare module 'gi://St' {
   export class Bin {
-    constructor(config?: { style_class?: string; y_align?: unknown });
+    constructor(config?: {
+      style_class?: string;
+      y_align?: unknown;
+      width?: number;
+      height?: number;
+      child?: unknown;
+    });
 
     set_child(actor: unknown): void;
   }
@@ -82,7 +88,10 @@ declare module 'gi://St' {
   export class BoxLayout {
     constructor(config?: { style_class?: string });
 
+    set_vertical(vertical: boolean): void;
     add_child(actor: unknown): void;
+    get_children(): unknown[] | null;
+    destroy_all_children(): void;
   }
 
   export class Label {
@@ -90,11 +99,60 @@ declare module 'gi://St' {
 
     text: string;
     style: string;
+
+    set_text(text: string): void;
   }
 
   export class Icon {
-    constructor(config?: { gicon?: unknown; style_class?: string });
+    constructor(config?: {
+      gicon?: unknown;
+      style_class?: string;
+      icon_name?: string;
+      icon_size?: number;
+    });
+
+    set_icon_name(name: string): void;
   }
+
+  export class Button {
+    constructor(config?: { style_class?: string; child?: unknown; accessible_name?: string });
+
+    child: unknown;
+
+    connect(signal: string, callback: (...args: unknown[]) => unknown): number;
+    disconnect(id: number): void;
+  }
+
+  export class Widget {
+    constructor(config?: { style_class?: string; reactive?: boolean; style?: string });
+
+    y: number;
+    height: number;
+
+    set_style(style: string): void;
+    add_child(actor: unknown): void;
+    remove_child(actor: unknown): void;
+    get_child(): unknown | null;
+    get_parent(): unknown | null;
+  }
+
+  export class ScrollView {
+    constructor(config?: {
+      style_class?: string;
+      hscrollbar_policy?: unknown;
+      vscrollbar_policy?: unknown;
+      style?: string;
+    });
+
+    add_child(actor: unknown): void;
+    get_vscroll_bar(): { get_adjustment(): unknown | null } | null;
+  }
+
+  export const PolicyType: {
+    NEVER: unknown;
+    AUTOMATIC: unknown;
+    ALWAYS: unknown;
+  };
 
   export enum TextAlign {
     START = 0,
@@ -107,6 +165,10 @@ declare module 'gi://St' {
     BoxLayout: typeof BoxLayout;
     Label: typeof Label;
     Icon: typeof Icon;
+    Button: typeof Button;
+    Widget: typeof Widget;
+    ScrollView: typeof ScrollView;
+    PolicyType: typeof PolicyType;
     TextAlign: typeof TextAlign;
   };
   export default St;
@@ -162,8 +224,14 @@ declare module 'resource:///org/gnome/shell/ui/popupMenu.js' {
   export class PopupMenu {
     addMenuItem(item: unknown, position?: number): void;
   }
+  export class PopupMenuSection {
+    addMenuItem(item: unknown, position?: number): void;
+    readonly section: unknown;
+  }
   export class PopupBaseMenuItem {
+    constructor(config?: { reactive?: boolean; can_focus?: boolean });
     setOrnament(ornament: Ornament): void;
+    add_child(actor: unknown): void;
   }
   export class PopupMenuItem extends PopupBaseMenuItem {
     constructor(text: string, params?: unknown);

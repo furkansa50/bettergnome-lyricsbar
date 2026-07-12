@@ -27,6 +27,7 @@
     "durationMs": null,
     "trackId": "/org/chromium/MediaPlayer2/TrackList/TrackEmpty",
     "playbackStatus": "Stopped",
-    "url": null
+    "url": null,
+    "artUrl": null
   }
 }

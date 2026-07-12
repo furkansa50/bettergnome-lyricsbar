@@ -28,6 +28,7 @@
     "album": "",
     "durationMs": 12000,
     "trackId": "/org/chromium/MediaPlayer2/TrackList/TrackTransient",
-    "playbackStatus": "Playing"
+    "playbackStatus": "Playing",
+    "artUrl": "file:///tmp/.com.google.Chrome.transient"
   }
 }

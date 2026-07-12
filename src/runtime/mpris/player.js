@@ -198,6 +198,119 @@ export class PlayerProxy {
   }
 
   /**
+   * Toggle playback (play/pause) on the active player via MPRIS.
+   *
+   * @returns {void}
+   */
+  playPause() {
+    this.#callPlayerMethod('PlayPause');
+  }
+
+  /**
+   * Skip to the next track.
+   *
+   * @returns {void}
+   */
+  next() {
+    this.#callPlayerMethod('Next');
+  }
+
+  /**
+   * Skip to the previous track.
+   *
+   * @returns {void}
+   */
+  previous() {
+    this.#callPlayerMethod('Previous');
+  }
+
+  /**
+   * Seek to an absolute position. Requires the MPRIS trackId so the player can
+   * reject the seek if the track has changed underneath us.
+   *
+   * @param {string | null} trackId MPRIS `mpris:trackid`, or null to skip.
+   * @param {number} positionMs Absolute position in milliseconds.
+   * @returns {void}
+   */
+  setPosition(trackId, positionMs) {
+    if (typeof trackId !== 'string' || trackId === '') {
+      return;
+    }
+    if (typeof positionMs !== 'number' || !Number.isFinite(positionMs) || positionMs < 0) {
+      return;
+    }
+
+    const trackIdVariant = new GLib.Variant('o', trackId);
+    const positionUs = Math.round(positionMs * 1000);
+    this.#callPlayerMethodWithArgs(
+      'SetPosition',
+      new GLib.Variant('(ox)', [trackIdVariant, positionUs]),
+    );
+  }
+
+  /**
+   * Invoke a parameter-less MPRIS Player method (PlayPause, Next, Previous).
+   *
+   * These are fire-and-forget: errors (e.g. player missing the method) are
+   * logged and swallowed so a popup button click never crashes the shell.
+   *
+   * @param {string} method
+   * @returns {void}
+   */
+  #callPlayerMethod(method) {
+    this.#callPlayerMethodWithArgs(method, null);
+  }
+
+  /**
+   * @param {string} method
+   * @param {any} parameters GLib.Variant of the method parameters, or null.
+   * @returns {void}
+   */
+  #callPlayerMethodWithArgs(method, parameters) {
+    if (!this.#enabled || this.#gone || this.#connection === null) {
+      return;
+    }
+
+    this.#logger?.debug('player-call', { busName: this.#busName, method });
+
+    try {
+      this.#connection.call(
+        this.#busName,
+        PLAYER_PATH,
+        PLAYER_IFACE,
+        method,
+        parameters,
+        parameters === null ? null : new GLib.VariantType('()'),
+        Gio.DBusCallFlags.NONE,
+        -1,
+        this.#cancellable,
+        /**
+         * @param {unknown} _source
+         * @param {unknown} result
+         * @returns {void}
+         */
+        (_source, result) => {
+          if (!this.#enabled || this.#gone) {
+            return;
+          }
+          try {
+            this.#connection.call_finish(result);
+          } catch (error) {
+            if (!isCancelledError(error)) {
+              this.#logger?.debug('player-call-failed', {
+                busName: this.#busName,
+                method,
+              });
+            }
+          }
+        },
+      );
+    } catch {
+      this.#logger?.debug('player-call-threw', { busName: this.#busName, method });
+    }
+  }
+
+  /**
    * @param {any} proxy
    * @returns {void}
    */

@@ -9,6 +9,7 @@ import { normalizeSettings } from '../domain/settings/normalize.js';
  *   get_int(key: string): number,
  *   get_strv(key: string): string[],
  *   get_boolean(key: string): boolean,
+ *   get_double(key: string): number,
  *   connect(signal: string, callback: () => void): number,
  *   disconnect(id: number): void,
  * }>} GSettingsBackend
@@ -17,16 +18,19 @@ import { normalizeSettings } from '../domain/settings/normalize.js';
 const SETTING_KEYS = [
   'panel-position',
   'max-width',
+  'auto-width',
   'text-align',
   'fallback-mode',
   'show-settings-icon',
   'player-priority',
   'browser-player-service',
+  'lyrics-source',
   'cache-enabled',
   'debug-logging',
   'style-text-color-type',
   'style-text-color-custom',
   'style-text-shadow',
+  'style-glow-strength',
 ];
 
 export class SettingsAdapter {
@@ -54,11 +58,14 @@ export class SettingsAdapter {
       showSettingsIcon: this.#settings.get_boolean('show-settings-icon'),
       playerPriority: this.#settings.get_strv('player-priority'),
       browserPlayerService: this.#settings.get_string('browser-player-service'),
+      lyricsSource: this.#settings.get_string('lyrics-source'),
       cacheEnabled: this.#settings.get_boolean('cache-enabled'),
       debugLogging: this.#settings.get_boolean('debug-logging'),
       textColorMode: this.#settings.get_string('style-text-color-type'),
       customTextColor: this.#settings.get_string('style-text-color-custom'),
       textShadowEnabled: this.#settings.get_boolean('style-text-shadow'),
+      glowStrength: this.#settings.get_double('style-glow-strength'),
+      autoWidth: this.#settings.get_boolean('auto-width'),
     });
   }
 

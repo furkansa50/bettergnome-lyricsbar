@@ -13,6 +13,8 @@ describe('buildLabelStyleString', () => {
       textColorMode: 'default',
       customTextColor: '#ffffff',
       textShadowEnabled: true,
+      glowStrength: 1.0,
+      autoWidth: false,
     });
     expect(result).toBe(
       `width: 360px; min-width: 1px; text-align: left; color: #ffffff; text-shadow: ${GLOW_SHADOW};`,
@@ -26,6 +28,8 @@ describe('buildLabelStyleString', () => {
       textColorMode: 'white',
       customTextColor: '#ffffff',
       textShadowEnabled: false,
+      glowStrength: 1.0,
+      autoWidth: false,
     });
     expect(result).toBe(
       'width: 240px; min-width: 1px; text-align: center; color: #ffffff; text-shadow: none;',
@@ -39,6 +43,8 @@ describe('buildLabelStyleString', () => {
       textColorMode: 'black',
       customTextColor: '#ffffff',
       textShadowEnabled: true,
+      glowStrength: 1.0,
+      autoWidth: false,
     });
     expect(result).toBe(
       `width: 180px; min-width: 1px; text-align: right; color: #000000; text-shadow: ${GLOW_SHADOW};`,
@@ -52,6 +58,8 @@ describe('buildLabelStyleString', () => {
       textColorMode: 'custom',
       customTextColor: '#ff55aa',
       textShadowEnabled: true,
+      glowStrength: 1.0,
+      autoWidth: false,
     });
     expect(result).toBe(
       `width: 360px; min-width: 1px; text-align: left; color: #ff55aa; text-shadow: ${GLOW_SHADOW};`,
@@ -65,21 +73,40 @@ describe('buildLabelStyleString', () => {
       textColorMode: 'system',
       customTextColor: '#ffffff',
       textShadowEnabled: false,
+      glowStrength: 1.0,
+      autoWidth: false,
     });
     expect(result).toBe('width: 360px; min-width: 1px; text-align: left; text-shadow: none;');
   });
 
-  it('disables text shadow even if enabled when word-timed lyrics are active', () => {
+  it('keeps text shadow enabled even when word-timed lyrics are active', () => {
     const result = buildLabelStyleString({
       maxWidth: 360,
       textAlign: 'left',
       textColorMode: 'default',
       customTextColor: '#ffffff',
       textShadowEnabled: true,
+      glowStrength: 1.0,
+      autoWidth: false,
       words: [{ beginMs: 1000, endMs: 2000, text: 'Hello' }],
     });
     expect(result).toBe(
-      'width: 360px; min-width: 1px; text-align: left; color: #ffffff; text-shadow: none;',
+      `width: 360px; min-width: 1px; text-align: left; color: #ffffff; text-shadow: ${GLOW_SHADOW};`,
+    );
+  });
+
+  it('builds text shadow with custom strength multiplier', () => {
+    const result = buildLabelStyleString({
+      maxWidth: 360,
+      textAlign: 'left',
+      textColorMode: 'default',
+      customTextColor: '#ffffff',
+      textShadowEnabled: true,
+      glowStrength: 1.5,
+      autoWidth: false,
+    });
+    expect(result).toBe(
+      'width: 360px; min-width: 1px; text-align: left; color: #ffffff; text-shadow: 0 0 8px rgba(255, 255, 255, 0.9), 0 0 16px rgba(255, 255, 255, 0.6), 0 0 24px rgba(255, 255, 255, 0.3);',
     );
   });
 });

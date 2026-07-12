@@ -7,7 +7,8 @@ export const DEFAULT_TEXT_COLOR_MODE = 'default';
 
 export const DEFAULT_CUSTOM_TEXT_COLOR = '#ffffff';
 export const DEFAULT_TEXT_SHADOW_ENABLED = true;
-export const DEFAULT_TEXT_SHADOW = '0 1px 2px rgba(0, 0, 0, 0.8)';
+export const DEFAULT_TEXT_SHADOW =
+  '0 0 8px rgba(255, 255, 255, 0.6), 0 0 16px rgba(255, 255, 255, 0.4), 0 0 24px rgba(255, 255, 255, 0.2)';
 export const WHITE_TEXT_COLOR = '#ffffff';
 export const BLACK_TEXT_COLOR = '#000000';
 

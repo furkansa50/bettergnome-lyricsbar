@@ -19,6 +19,7 @@ function snapshot(overrides) {
     durationMs: null,
     trackId: null,
     url: null,
+    artUrl: null,
     playbackStatus: 'Stopped',
     ...overrides,
   };

@@ -59,6 +59,7 @@ export function parseLrclibResponse(value) {
         kind: 'synced',
         track,
         lines: Object.freeze(lines),
+        wordLines: Object.freeze([]),
         plainText: plain ?? '',
       });
     }

@@ -14,6 +14,7 @@ const KEY_ALBUM = 'xesam:album';
 const KEY_LENGTH = 'mpris:length';
 const KEY_TRACK_ID = 'mpris:trackid';
 const KEY_URL = 'xesam:url';
+const KEY_ART_URL = 'mpris:artUrl';
 
 /**
  * @param {string} busName
@@ -32,6 +33,7 @@ export function mapMprisProperties(busName, properties) {
     durationMs: metadata.durationMs,
     trackId: metadata.trackId,
     url: metadata.url,
+    artUrl: metadata.artUrl,
     playbackStatus: get(bag, KEY_PLAYBACK_STATUS),
   });
 }
@@ -56,6 +58,7 @@ export function applyPropertyChanges(snapshot, changes) {
    *   durationMs: unknown,
    *   trackId: unknown,
    *   url: unknown,
+   *   artUrl: unknown,
    *   playbackStatus: unknown,
    * }}
    */
@@ -67,6 +70,7 @@ export function applyPropertyChanges(snapshot, changes) {
     durationMs: snapshot.durationMs,
     trackId: snapshot.trackId,
     url: snapshot.url,
+    artUrl: snapshot.artUrl,
     playbackStatus: snapshot.playbackStatus,
   };
 
@@ -78,6 +82,7 @@ export function applyPropertyChanges(snapshot, changes) {
     merged.durationMs = metadata.durationMs ?? snapshot.durationMs;
     merged.trackId = metadata.trackId ?? snapshot.trackId;
     merged.url = metadata.url ?? snapshot.url;
+    merged.artUrl = metadata.artUrl ?? snapshot.artUrl;
   }
 
   if (Object.hasOwn(bag, KEY_PLAYBACK_STATUS)) {
@@ -108,6 +113,7 @@ export function snapshotsEqual(a, b) {
     a.durationMs === b.durationMs &&
     a.trackId === b.trackId &&
     a.url === b.url &&
+    a.artUrl === b.artUrl &&
     a.playbackStatus === b.playbackStatus
   );
 }
@@ -121,6 +127,7 @@ export function snapshotsEqual(a, b) {
  *   durationMs: unknown,
  *   trackId: unknown,
  *   url: unknown,
+ *   artUrl: unknown,
  * }}
  */
 function readMetadata(value) {
@@ -133,6 +140,7 @@ function readMetadata(value) {
     durationMs: microsecondsToMilliseconds(get(bag, KEY_LENGTH)),
     trackId: get(bag, KEY_TRACK_ID),
     url: get(bag, KEY_URL),
+    artUrl: readArtUrl(get(bag, KEY_ART_URL)),
   };
 }
 
@@ -143,6 +151,32 @@ function readMetadata(value) {
 function readPropertyBag(value) {
   const unpacked = unpackVariantTree(value);
   return isPropertyBag(unpacked) ? unpacked : {};
+}
+
+/**
+ * MPRIS `mpris:artUrl` is usually a single string URL, but some players expose
+ * an array of candidate URLs. Accept the first usable string and trim it.
+ *
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+function readArtUrl(value) {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const resolved = readArtUrl(item);
+      if (resolved !== null) {
+        return resolved;
+      }
+    }
+    return null;
+  }
+
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
 }
 
 /**

@@ -195,6 +195,7 @@ function snapshot(overrides) {
     durationMs: 230000,
     trackId: '/com/spotify/track/natural',
     url: null,
+    artUrl: null,
     playbackStatus: 'Playing',
     ...overrides,
   };

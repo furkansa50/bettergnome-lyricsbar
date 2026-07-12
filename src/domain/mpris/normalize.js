@@ -12,6 +12,7 @@ const PLAYBACK_STATUSES = new Set(['Playing', 'Paused', 'Stopped']);
  *   durationMs?: unknown,
  *   trackId?: unknown,
  *   url?: unknown,
+ *   artUrl?: unknown,
  *   playbackStatus?: unknown,
  * }>} RawSnapshot
  */
@@ -39,6 +40,7 @@ export function normalizePlayerSnapshot(raw) {
     durationMs: normalizeDurationMs(candidate.durationMs),
     trackId: normalizeTrackId(candidate.trackId),
     url: normalizeUrl(candidate.url),
+    artUrl: normalizeUrl(candidate.artUrl),
     playbackStatus: normalizePlaybackStatus(candidate.playbackStatus),
   };
 }

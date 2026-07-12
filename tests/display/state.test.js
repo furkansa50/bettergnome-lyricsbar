@@ -155,7 +155,7 @@ describe('formatDisplayState', () => {
         'track',
       ),
     ).toEqual({
-      text: '<span weight="bold">Look</span> <span alpha="35%">at</span>',
+      text: '<span foreground="#ffffff" weight="bold">Look</span> <span foreground="#ffffff59">at</span>',
       visible: true,
     });
 
@@ -170,7 +170,7 @@ describe('formatDisplayState', () => {
         'track',
       ),
     ).toEqual({
-      text: '<span alpha="35%">Look</span> <span weight="bold">at</span>',
+      text: '<span foreground="#ffffff">Look</span> <span foreground="#ffffff" weight="bold">at</span>',
       visible: true,
     });
   });

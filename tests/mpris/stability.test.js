@@ -378,6 +378,7 @@ function snapshot(overrides) {
     durationMs: 277991,
     trackId: '/org/chromium/MediaPlayer2/TrackList/Nina',
     url: null,
+    artUrl: null,
     playbackStatus: 'Playing',
     ...overrides,
   };

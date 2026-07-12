@@ -302,6 +302,7 @@ function snapshot(overrides) {
     trackId: '/org/chromium/MediaPlayer2/TrackList/TrackADA31A8E30FC47629D668EB1B187366E',
     playbackStatus: 'Playing',
     url: null,
+    artUrl: null,
     ...overrides,
   };
 }

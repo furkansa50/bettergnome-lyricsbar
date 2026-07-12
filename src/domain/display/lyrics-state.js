@@ -87,6 +87,20 @@ export function displayStateFromSyncedPosition(player, lookup, positionMs) {
 
   /** @type {DisplayTrack} */
   const track = { title: player.title, artist: player.artist };
+
+  const firstLine = lookup.lines[0];
+  if (firstLine && positionMs < firstLine.timeMs) {
+    if (player.album && player.album.trim() !== '') {
+      return {
+        kind: 'lyrics',
+        line: player.album,
+        words: [],
+        activeWordIndex: -1,
+        track,
+      };
+    }
+  }
+
   const line = selectLyricLine(lookup.lines, positionMs);
   if (line !== null && line.text.trim() !== '') {
     // Find matching word-timed line for glow effect

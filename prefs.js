@@ -13,6 +13,7 @@ import {
   TEXT_COLOR_MODES,
   textColorModeIndex,
 } from './src/domain/settings/appearance.js';
+import { _t } from './src/runtime/i18n.js';
 
 /**
  * @typedef {{
@@ -48,22 +49,30 @@ export default class LyricBarPreferences extends ExtensionPreferences {
     const connections = [];
 
     const page = new Adw.PreferencesPage({
-      title: 'LyricBar',
+      title: 'Better Lyrics',
       icon_name: 'audio-x-generic-symbolic',
     });
 
     // 1. Display Group
     const displayGroup = new Adw.PreferencesGroup({
-      title: 'Display',
-      description: 'Control how LyricBar appears in the GNOME top bar.',
+      title: _t('Display', 'Gösterim'),
+      description: _t(
+        'Control how Better Lyrics appears in the GNOME top bar.',
+        "Better Lyrics'in GNOME üst barında nasıl görüneceğini kontrol edin.",
+      ),
     });
 
     // panel-position: ComboRow
     const positions = ['left', 'center', 'right'];
     const panelPositionRow = new Adw.ComboRow({
-      title: 'Panel position',
-      subtitle: 'Where the LyricBar indicator is placed in the top bar.',
-      model: new Gtk.StringList({ strings: ['Left', 'Center', 'Right'] }),
+      title: _t('Panel position', 'Panel konumu'),
+      subtitle: _t(
+        'Where the Better Lyrics indicator is placed in the top bar.',
+        'Better Lyrics göstergesinin üst bara nereye yerleştirileceği.',
+      ),
+      model: new Gtk.StringList({
+        strings: [_t('Left', 'Sol'), _t('Center', 'Orta'), _t('Right', 'Sağ')],
+      }),
     });
     const currentPos = settings.get_string('panel-position');
     const posIndex = positions.indexOf(currentPos);
@@ -89,8 +98,11 @@ export default class LyricBarPreferences extends ExtensionPreferences {
 
     // max-width: SpinRow
     const maxWidthRow = new Adw.SpinRow({
-      title: 'Maximum width',
-      subtitle: 'Maximum top-bar label width in pixels.',
+      title: _t('Maximum width', 'Maksimum genişlik'),
+      subtitle: _t(
+        'Maximum top-bar label width in pixels.',
+        'Piksel cinsinden maksimum üst bar etiket genişliği.',
+      ),
       adjustment: new Gtk.Adjustment({
         lower: 120,
         upper: 720,
@@ -101,12 +113,28 @@ export default class LyricBarPreferences extends ExtensionPreferences {
     });
     settings.bind('max-width', maxWidthRow, 'value', Gio.SettingsBindFlags.DEFAULT);
 
+    // auto-width: SwitchRow
+    const autoWidthRow = new Adw.SwitchRow({
+      title: _t('Auto width', 'Otomatik genişlik'),
+      subtitle: _t(
+        'Automatically adjust label width to fit lyrics text (up to maximum width).',
+        'Etiket genişliğini şarkı sözü metnine otomatik ayarla (maksimum genişliğe kadar).',
+      ),
+      active: settings.get_boolean('auto-width'),
+    });
+    settings.bind('auto-width', autoWidthRow, 'active', Gio.SettingsBindFlags.DEFAULT);
+
     // text-align: ComboRow
     const alignments = ['left', 'center', 'right'];
     const textAlignRow = new Adw.ComboRow({
-      title: 'Text alignment',
-      subtitle: 'Horizontal alignment of the lyric text within the indicator.',
-      model: new Gtk.StringList({ strings: ['Left', 'Center', 'Right'] }),
+      title: _t('Text alignment', 'Metin hizalama'),
+      subtitle: _t(
+        'Horizontal alignment of the lyric text within the indicator.',
+        'Gösterge içindeki şarkı sözü metninin yatay hizalaması.',
+      ),
+      model: new Gtk.StringList({
+        strings: [_t('Left', 'Sol'), _t('Center', 'Orta'), _t('Right', 'Sağ')],
+      }),
     });
     const currentAlign = settings.get_string('text-align');
     const alignIndex = alignments.indexOf(currentAlign);
@@ -133,10 +161,17 @@ export default class LyricBarPreferences extends ExtensionPreferences {
     // fallback-mode: ComboRow
     const fallbackModes = ['track', 'idle', 'hidden'];
     const fallbackModeRow = new Adw.ComboRow({
-      title: 'Fallback mode',
-      subtitle: 'Display behavior when synced lyrics are unavailable.',
+      title: _t('Fallback mode', 'Alternatif mod'),
+      subtitle: _t(
+        'Display behavior when synced lyrics are unavailable.',
+        'Eşzamanlı şarkı sözleri bulunamadığında gösterilecek içerik.',
+      ),
       model: new Gtk.StringList({
-        strings: ['Show track title', 'Show static idle text', 'Hide indicator'],
+        strings: [
+          _t('Show track title', 'Şarkıyı göster'),
+          _t('Show static idle text', 'Boştaki metni göster'),
+          _t('Hide indicator', 'Gizle'),
+        ],
       }),
     });
     const currentFallback = settings.get_string('fallback-mode');
@@ -162,8 +197,11 @@ export default class LyricBarPreferences extends ExtensionPreferences {
     connections.push([settings, fallbackChangedId]);
 
     const showSettingsIconRow = new Adw.SwitchRow({
-      title: 'Show settings icon',
-      subtitle: 'Show a separate top-bar shortcut to LyricBar preferences.',
+      title: _t('Show settings icon', 'Ayarlar simgesini göster'),
+      subtitle: _t(
+        'Show a separate top-bar shortcut to Better Lyrics preferences.',
+        'Better Lyrics ayarlarına giden ayrı bir üst bar kısayolu göster.',
+      ),
     });
     settings.bind(
       'show-settings-icon',
@@ -174,21 +212,31 @@ export default class LyricBarPreferences extends ExtensionPreferences {
 
     displayGroup.add(panelPositionRow);
     displayGroup.add(maxWidthRow);
+    displayGroup.add(autoWidthRow);
     displayGroup.add(textAlignRow);
     displayGroup.add(fallbackModeRow);
     displayGroup.add(showSettingsIconRow);
 
     // 1.5 Appearance Group
     const appearanceGroup = new Adw.PreferencesGroup({
-      title: 'Appearance',
-      description: 'Customize lyric text style.',
+      title: _t('Appearance', 'Görünüm'),
+      description: _t('Customize lyric text style.', 'Şarkı sözü metin stilini özelleştirin.'),
     });
 
     const textColorPresetRow = new Adw.ComboRow({
-      title: 'Text color preset',
-      subtitle: 'Preset text color style for the lyric label.',
+      title: _t('Text color preset', 'Metin renk şablonu'),
+      subtitle: _t(
+        'Preset text color style for the lyric label.',
+        'Şarkı sözü etiketi için hazır metin rengi stili.',
+      ),
       model: new Gtk.StringList({
-        strings: ['Default (White)', 'Theme default', 'White', 'Black', 'Custom color'],
+        strings: [
+          _t('Default (White)', 'Varsayılan (Beyaz)'),
+          _t('Theme default', 'Sistem teması varsayılanı'),
+          _t('White', 'Beyaz'),
+          _t('Black', 'Siyah'),
+          _t('Custom color', 'Özel renk'),
+        ],
       }),
     });
     const currentColorType = settings.get_string('style-text-color-type');
@@ -198,14 +246,14 @@ export default class LyricBarPreferences extends ExtensionPreferences {
     }
 
     const textColorCustomRow = new Adw.EntryRow({
-      title: 'Custom text color (HEX)',
+      title: _t('Custom text color (HEX)', 'Özel metin rengi (HEX)'),
       show_apply_button: true,
     });
     textColorCustomRow.text = settings.get_string('style-text-color-custom');
 
     const colorPickerButton = new Gtk.ColorDialogButton({
       dialog: new Gtk.ColorDialog({
-        title: 'Pick text color',
+        title: _t('Pick text color', 'Metin rengi seçin'),
         modal: true,
         with_alpha: false,
       }),
@@ -268,24 +316,57 @@ export default class LyricBarPreferences extends ExtensionPreferences {
     connections.push([settings, textColorCustomChangedId]);
 
     const textShadowRow = new Adw.SwitchRow({
-      title: 'Text drop shadow',
-      subtitle: 'Show a drop shadow behind the lyric text for readability.',
+      title: _t('Text drop shadow (Glow)', 'Metin gölgesi (Parlama)'),
+      subtitle: _t(
+        'Show a drop shadow behind the lyric text for readability.',
+        'Okunabilirliği artırmak için metnin arkasında gölge/parlama göster.',
+      ),
     });
     settings.bind('style-text-shadow', textShadowRow, 'active', Gio.SettingsBindFlags.DEFAULT);
+
+    const glowStrengthRow = new Adw.SpinRow({
+      title: _t('Glow strength', 'Parlama gücü'),
+      subtitle: _t(
+        'Adjust the intensity of the text shadow glow.',
+        'Metin gölgesi parlama yoğunluğunu ayarlayın.',
+      ),
+      digits: 1,
+      adjustment: new Gtk.Adjustment({
+        lower: 0.0,
+        upper: 2.0,
+        step_increment: 0.1,
+        page_increment: 0.5,
+        value: settings.get_double('style-glow-strength'),
+      }),
+    });
+    settings.bind('style-glow-strength', glowStrengthRow, 'value', Gio.SettingsBindFlags.DEFAULT);
+
+    const updateGlowStrengthVisibility = () => {
+      glowStrengthRow.visible = textShadowRow.active;
+    };
+    updateGlowStrengthVisibility();
+    const shadowActiveId = textShadowRow.connect('notify::active', () => {
+      updateGlowStrengthVisibility();
+    });
+    connections.push([textShadowRow, shadowActiveId]);
 
     appearanceGroup.add(textColorPresetRow);
     appearanceGroup.add(textColorCustomRow);
     appearanceGroup.add(textShadowRow);
+    appearanceGroup.add(glowStrengthRow);
 
     // 2. Behavior Group
     const behaviorGroup = new Adw.PreferencesGroup({
-      title: 'Behavior',
-      description: 'Customize lyrics behavior and player connection.',
+      title: _t('Behavior', 'Davranış'),
+      description: _t(
+        'Customize lyrics behavior and player connection.',
+        'Şarkı sözü davranışını ve oynatıcı bağlantısını özelleştirin.',
+      ),
     });
 
     // player-priority: EntryRow
     const playerPriorityRow = new Adw.EntryRow({
-      title: 'Player priority (comma-separated)',
+      title: _t('Player priority (comma-separated)', 'Oynatıcı önceliği (virgülle ayrılmış)'),
       show_apply_button: true,
     });
     const currentPriority = settings.get_strv('player-priority').join(', ');
@@ -309,8 +390,11 @@ export default class LyricBarPreferences extends ExtensionPreferences {
 
     // cache-enabled: SwitchRow
     const cacheEnabledRow = new Adw.SwitchRow({
-      title: 'Cache lyrics',
-      subtitle: 'Whether lyric lookup results should be cached locally.',
+      title: _t('Cache lyrics', 'Şarkı sözlerini önbelleğe al'),
+      subtitle: _t(
+        'Whether lyric lookup results should be cached locally.',
+        'Şarkı sözü arama sonuçlarının yerel olarak önbelleğe alınıp alınmayacağı.',
+      ),
     });
     settings.bind('cache-enabled', cacheEnabledRow, 'active', Gio.SettingsBindFlags.DEFAULT);
 
@@ -319,10 +403,19 @@ export default class LyricBarPreferences extends ExtensionPreferences {
     // browser-player-service: ComboRow
     const browserPlayerServices = ['auto', 'spotify', 'youtube-music', 'apple-music', 'generic'];
     const browserPlayerServiceRow = new Adw.ComboRow({
-      title: 'Browser player service',
-      subtitle: 'How browser media players should be interpreted.',
+      title: _t('Browser player service', 'Tarayıcı oynatıcı servisi'),
+      subtitle: _t(
+        'How browser media players should be interpreted.',
+        'Tarayıcı medya oynatıcılarının nasıl yorumlanacağı.',
+      ),
       model: new Gtk.StringList({
-        strings: ['Auto detect', 'Spotify Web', 'YouTube Music', 'Apple Music', 'Generic browser'],
+        strings: [
+          _t('Auto detect', 'Otomatik algıla'),
+          'Spotify Web',
+          'YouTube Music',
+          'Apple Music',
+          _t('Generic browser', 'Genel tarayıcı'),
+        ],
       }),
     });
     const currentBrowserPlayerService = settings.get_string('browser-player-service');
@@ -358,46 +451,101 @@ export default class LyricBarPreferences extends ExtensionPreferences {
     behaviorGroup.add(browserPlayerServiceRow);
     behaviorGroup.add(cacheEnabledRow);
 
+    // lyrics-source: ComboRow
+    const lyricsSources = ['auto', 'better-lyrics', 'lrclib'];
+    const lyricsSourceRow = new Adw.ComboRow({
+      title: _t('Lyrics provider', 'Şarkı sözü kaynağı'),
+      subtitle: _t(
+        'Choose where synced lyrics are fetched from.',
+        'Senkronize şarkı sözlerinin nereden alınacağını seçin.',
+      ),
+      model: new Gtk.StringList({
+        strings: [
+          _t(
+            'Auto (Unison -> Better Lyrics -> LRCLIB)',
+            'Otomatik (Unison -> Better Lyrics -> LRCLIB)',
+          ),
+          _t(
+            'Unison + Better Lyrics (Word-by-word synced)',
+            'Unison + Better Lyrics (Kelime kelime senkronize)',
+          ),
+          'LRCLIB',
+        ],
+      }),
+    });
+    const currentLyricsSource = settings.get_string('lyrics-source');
+    const lyricsSourceIndex = lyricsSources.indexOf(currentLyricsSource);
+    if (lyricsSourceIndex !== -1) {
+      lyricsSourceRow.selected = lyricsSourceIndex;
+    }
+    const lyricsSourceNotifyId = lyricsSourceRow.connect('notify::selected', () => {
+      const { selected } = lyricsSourceRow;
+      if (selected >= 0 && selected < lyricsSources.length) {
+        settings.set_string('lyrics-source', lyricsSources[selected]);
+      }
+    });
+    connections.push([lyricsSourceRow, lyricsSourceNotifyId]);
+
+    const lyricsSourceChangedId = settings.connect('changed::lyrics-source', () => {
+      const current = settings.get_string('lyrics-source');
+      const idx = lyricsSources.indexOf(current);
+      if (idx !== -1 && lyricsSourceRow.selected !== idx) {
+        lyricsSourceRow.selected = idx;
+      }
+    });
+    connections.push([settings, lyricsSourceChangedId]);
+
+    behaviorGroup.add(lyricsSourceRow);
+
     // 3. Debugging Group
     const debuggingGroup = new Adw.PreferencesGroup({
-      title: 'Debugging',
-      description: 'Troubleshoot issues.',
+      title: _t('Debugging', 'Hata Ayıklama'),
+      description: _t('Troubleshoot issues.', 'Sorunları giderin.'),
     });
 
     // debug-logging: SwitchRow
     const debugLoggingRow = new Adw.SwitchRow({
-      title: 'Debug logging',
-      subtitle: 'Whether verbose diagnostic logging should be enabled.',
+      title: _t('Debug logging', 'Hata ayıklama günlüğü'),
+      subtitle: _t(
+        'Whether verbose diagnostic logging should be enabled.',
+        'Detaylı teşhis günlüklerinin etkinleştirilip etkinleştirilmeyeceği.',
+      ),
     });
     settings.bind('debug-logging', debugLoggingRow, 'active', Gio.SettingsBindFlags.DEFAULT);
 
     debuggingGroup.add(debugLoggingRow);
 
     const copyDiagnosticsRow = new Adw.ActionRow({
-      title: 'Copy diagnostics',
-      subtitle: 'Copy safe extension settings for bug reports.',
+      title: _t('Copy diagnostics', 'Teşhis bilgilerini kopyala'),
+      subtitle: _t(
+        'Copy safe extension settings for bug reports.',
+        'Hata raporları için güvenli uzantı ayarlarını kopyalayın.',
+      ),
     });
     const copyDiagnosticsButton = new Gtk.Button({
       icon_name: 'edit-copy-symbolic',
       valign: Gtk.Align.CENTER,
-      tooltip_text: 'Copy diagnostics',
+      tooltip_text: _t('Copy diagnostics', 'Teşhis bilgilerini kopyala'),
     });
     const copyDiagnosticsId = copyDiagnosticsButton.connect('clicked', () => {
       window.get_clipboard().set(buildDiagnosticsMarkdown(metadata, settings));
-      copyDiagnosticsButton.tooltip_text = 'Copied diagnostics';
+      copyDiagnosticsButton.tooltip_text = _t('Copied diagnostics', 'Teşhis bilgileri kopyalandı');
     });
     connections.push([copyDiagnosticsButton, copyDiagnosticsId]);
     copyDiagnosticsRow.add_suffix(copyDiagnosticsButton);
     debuggingGroup.add(copyDiagnosticsRow);
 
     const openIssueRow = new Adw.ActionRow({
-      title: 'Open issue',
-      subtitle: 'Open GitHub issue tracker in your browser.',
+      title: _t('Open issue', 'Sorun bildir'),
+      subtitle: _t(
+        'Open GitHub issue tracker in your browser.',
+        'Tarayıcınızda GitHub sorun takipçisini açın.',
+      ),
     });
     const openIssueButton = new Gtk.Button({
       icon_name: 'dialog-question-symbolic',
       valign: Gtk.Align.CENTER,
-      tooltip_text: 'Open issue',
+      tooltip_text: _t('Open issue', 'Sorun bildir'),
     });
     const openIssueId = openIssueButton.connect('clicked', () => {
       Gtk.show_uri(
@@ -412,19 +560,19 @@ export default class LyricBarPreferences extends ExtensionPreferences {
 
     // 4. About Group
     const aboutGroup = new Adw.PreferencesGroup({
-      title: 'About',
+      title: _t('About', 'Hakkında'),
     });
 
     const currentVersion = readMetadataText(metadata, 'version-name', 'Unknown');
 
     const versionRow = new Adw.ActionRow({
-      title: 'Version',
+      title: _t('Version', 'Sürüm'),
       subtitle: currentVersion,
     });
 
     const updateRow = new Adw.ActionRow({
-      title: 'Update available',
-      subtitle: 'Checking for updates...',
+      title: _t('Update available', 'Sürüm güncellemesi mevcut'),
+      subtitle: _t('Checking for updates...', 'Güncellemeler kontrol ediliyor...'),
     });
     updateRow.visible = true;
 
@@ -438,7 +586,7 @@ export default class LyricBarPreferences extends ExtensionPreferences {
     const openButton = new Gtk.Button({
       icon_name: 'external-link-symbolic',
       valign: Gtk.Align.CENTER,
-      tooltip_text: 'View releases',
+      tooltip_text: _t('View releases', 'Sürümleri görüntüle'),
     });
     const openButtonId = openButton.connect('clicked', () => {
       Gtk.show_uri(window, releasesUrl, 0);
@@ -454,14 +602,14 @@ export default class LyricBarPreferences extends ExtensionPreferences {
 
     if (updaterExists) {
       updateNowButton = new Gtk.Button({
-        label: 'Update Now',
+        label: _t('Update Now', 'Şimdi Güncelle'),
         valign: Gtk.Align.CENTER,
         css_classes: ['suggested-action'],
       });
       const updateNowId = updateNowButton.connect('clicked', async () => {
         updateNowButton.sensitive = false;
-        updateNowButton.label = 'Updating...';
-        updateRow.subtitle = 'Running updater...';
+        updateNowButton.label = _t('Updating...', 'Güncelleniyor...');
+        updateRow.subtitle = _t('Running updater...', 'Güncelleyici çalıştırılıyor...');
 
         const result = await runSubprocess(UPDATER_PATH, []);
 
@@ -470,11 +618,17 @@ export default class LyricBarPreferences extends ExtensionPreferences {
         }
 
         if (result.ok) {
-          updateRow.subtitle = 'Updated! Restart GNOME Shell to apply.';
-          updateNowButton.label = 'Done';
+          updateRow.subtitle = _t(
+            'Updated! Restart GNOME Shell to apply.',
+            "Güncellendi! Uygulamak için GNOME Shell'i yeniden başlatın.",
+          );
+          updateNowButton.label = _t('Done', 'Bitti');
         } else {
-          updateRow.subtitle = 'Update failed. Try again or visit releases page.';
-          updateNowButton.label = 'Retry';
+          updateRow.subtitle = _t(
+            'Update failed. Try again or visit releases page.',
+            'Güncelleme başarısız oldu. Tekrar deneyin veya sürümler sayfasını ziyaret edin.',
+          );
+          updateNowButton.label = _t('Retry', 'Tekrar Dene');
           updateNowButton.sensitive = true;
         }
       });
@@ -487,9 +641,15 @@ export default class LyricBarPreferences extends ExtensionPreferences {
         return;
       }
       if (latestVersion) {
-        updateRow.subtitle = `${latestVersion} is available on GitHub`;
+        updateRow.subtitle = _t(
+          `${latestVersion} is available on GitHub`,
+          `${latestVersion} GitHub üzerinde mevcut`,
+        );
         if (!updaterExists) {
-          updateRow.subtitle += '. Install auto-updater to enable Update Now.';
+          updateRow.subtitle += _t(
+            '. Install auto-updater to enable Update Now.',
+            '. Şimdi Güncelle özelliğini etkinleştirmek için otomatik güncelleyiciyi yükleyin.',
+          );
         }
       } else {
         updateRow.visible = false;
@@ -497,13 +657,17 @@ export default class LyricBarPreferences extends ExtensionPreferences {
     });
 
     const uuidRow = new Adw.ActionRow({
-      title: 'Extension UUID',
-      subtitle: readMetadataText(metadata, 'uuid', 'lyricbar@fikrilal.github.io'),
+      title: _t('Extension UUID', 'Uzantı UUID'),
+      subtitle: readMetadataText(metadata, 'uuid', 'betterlyricsbar@furkansa50'),
     });
 
     const websiteRow = new Adw.ActionRow({
-      title: 'Website',
-      subtitle: readMetadataText(metadata, 'url', 'https://github.com/fikrilal/gnome-lyricbar'),
+      title: _t('Website', 'Web sitesi'),
+      subtitle: readMetadataText(
+        metadata,
+        'url',
+        'https://github.com/furkansa50/bettergnome-lyricbar',
+      ),
     });
     websiteRow.activatable = true;
     const websiteActivateId = websiteRow.connect('activated', () => {
@@ -709,13 +873,13 @@ function checkForUpdate(currentVersion, callback) {
  */
 function buildDiagnosticsMarkdown(metadata, settings) {
   return [
-    '## LyricBar diagnostics',
+    '## Better Lyrics diagnostics',
     '',
     '| Field | Value |',
     '| --- | --- |',
     `| Version | ${escapeMarkdownTable(readMetadataText(metadata, 'version-name', 'Unknown'))} |`,
-    `| UUID | ${escapeMarkdownTable(readMetadataText(metadata, 'uuid', 'lyricbar@fikrilal.github.io'))} |`,
-    `| URL | ${escapeMarkdownTable(readMetadataText(metadata, 'url', 'https://github.com/fikrilal/gnome-lyricbar'))} |`,
+    `| UUID | ${escapeMarkdownTable(readMetadataText(metadata, 'uuid', 'betterlyricsbar@furkansa50'))} |`,
+    `| URL | ${escapeMarkdownTable(readMetadataText(metadata, 'url', 'https://github.com/furkansa50/bettergnome-lyricbar'))} |`,
     `| Shell compatibility | ${escapeMarkdownTable(readShellVersions(metadata))} |`,
     `| Panel position | ${escapeMarkdownTable(settings.get_string('panel-position'))} |`,
     `| Text alignment | ${escapeMarkdownTable(settings.get_string('text-align'))} |`,

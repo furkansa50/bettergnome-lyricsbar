@@ -6,6 +6,10 @@
   min-width: 1px;
   padding-left: 8px;
   padding-right: 8px;
+  text-shadow:
+    0 0 8px rgba(255, 255, 255, 0.6),
+    0 0 16px rgba(255, 255, 255, 0.4),
+    0 0 24px rgba(255, 255, 255, 0.2);
 }
 
 .lyricbar-settings-button {
@@ -14,4 +18,108 @@
   padding-left: 0px;
   padding-right: 0px;
   width: 36px;
+}
+
+/* ── Details popup ──────────────────────────────────────── */
+
+.lyricbar-details-header {
+  spacing: 12px;
+  padding: 8px 4px;
+}
+
+.lyricbar-details-art {
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.lyricbar-details-art-icon {
+  padding: 0;
+}
+
+.lyricbar-details-info {
+  spacing: 2px;
+  padding-top: 4px;
+}
+
+.lyricbar-details-title {
+  font-size: 1.1em;
+  font-weight: bold;
+}
+
+.lyricbar-details-artist {
+  font-size: 0.9em;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.lyricbar-details-progress {
+  spacing: 8px;
+  padding: 4px 8px;
+}
+
+.lyricbar-details-progress-bar {
+  min-width: 150px;
+  border-radius: 2px;
+  background-color: rgba(255, 255, 255, 0.15);
+  height: 4px;
+  overflow: hidden;
+}
+
+.lyricbar-details-progress-fill {
+  border-radius: 2px;
+  height: 100%;
+}
+
+.lyricbar-details-position,
+.lyricbar-details-duration {
+  font-size: 0.85em;
+  color: rgba(255, 255, 255, 0.6);
+  min-width: 36px;
+}
+
+.lyricbar-details-controls {
+  spacing: 12px;
+  padding: 4px 8px;
+}
+
+.lyricbar-details-button {
+  padding: 6px;
+  border-radius: 50%;
+  transition-duration: 100ms;
+}
+
+.lyricbar-details-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.lyricbar-details-button:active {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.lyricbar-details-lyrics-scroll {
+  min-width: 280px;
+}
+
+.lyricbar-details-lyrics {
+  spacing: 1px;
+  padding: 4px 8px;
+}
+
+.lyricbar-details-lyric-line {
+  font-size: 0.9em;
+  color: rgba(255, 255, 255, 0.5);
+  padding: 2px 4px;
+}
+
+.lyricbar-details-lyric-active {
+  color: #ffffff;
+  font-weight: bold;
+  font-size: 1em;
+}
+
+.lyricbar-details-no-lyrics {
+  font-size: 0.9em;
+  color: rgba(255, 255, 255, 0.4);
+  padding: 16px 8px;
+  text-align: center;
 }

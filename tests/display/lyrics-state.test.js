@@ -23,6 +23,7 @@ function snapshot(overrides) {
     durationMs: 266773,
     trackId: '/com/spotify/track/abc',
     url: null,
+    artUrl: null,
     playbackStatus: 'Playing',
     ...overrides,
   };
@@ -212,8 +213,18 @@ describe('displayStateFromSyncedPosition', () => {
     });
   });
 
-  it('falls back to the static synced display before the first timestamp', () => {
+  it('displays the album name before the first timestamp when present', () => {
     expect(displayStateFromSyncedPosition(snapshot({}), syncedLookup, 500)).toEqual({
+      kind: 'lyrics',
+      line: 'Parachutes',
+      words: [],
+      activeWordIndex: -1,
+      track: { title: 'Yellow', artist: 'Coldplay' },
+    });
+  });
+
+  it('falls back to the first lyric line before the first timestamp when album is missing', () => {
+    expect(displayStateFromSyncedPosition(snapshot({ album: '' }), syncedLookup, 500)).toEqual({
       kind: 'lyrics',
       line: 'Look at the stars',
       words: [],
@@ -259,7 +270,7 @@ describe('displayStateFromSyncedPosition', () => {
     expect(displayStateFromSyncedPosition(snapshot({}), wordTimedLookup, 1200)).toEqual({
       kind: 'lyrics',
       line: 'Look at the stars',
-      words: wordTimedLookup.wordLines[0].words,
+      words: wordTimedLookup.wordLines[0]?.words,
       activeWordIndex: 0,
       track: { title: 'Yellow', artist: 'Coldplay' },
     });
@@ -268,7 +279,7 @@ describe('displayStateFromSyncedPosition', () => {
     expect(displayStateFromSyncedPosition(snapshot({}), wordTimedLookup, 1700)).toEqual({
       kind: 'lyrics',
       line: 'Look at the stars',
-      words: wordTimedLookup.wordLines[0].words,
+      words: wordTimedLookup.wordLines[0]?.words,
       activeWordIndex: 1,
       track: { title: 'Yellow', artist: 'Coldplay' },
     });

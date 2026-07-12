@@ -70,6 +70,7 @@ function appleMusicSnapshot(overrides) {
     durationMs: 1172197,
     trackId: '/org/chromium/MediaPlayer2/TrackList/TrackAD881F63680FE0B3A97734DAC2ED7F63',
     url: null,
+    artUrl: null,
     playbackStatus: 'Playing',
     ...overrides,
   };

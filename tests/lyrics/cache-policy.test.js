@@ -290,6 +290,7 @@ function playerSnapshot(overrides) {
     durationMs: 266773,
     trackId: '/com/spotify/track/yellow',
     url: null,
+    artUrl: null,
     playbackStatus: 'Playing',
     ...overrides,
   };

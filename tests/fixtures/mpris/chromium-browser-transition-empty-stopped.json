@@ -30,6 +30,7 @@
     "durationMs": 0,
     "trackId": null,
     "playbackStatus": "Stopped",
-    "url": null
+    "url": null,
+    "artUrl": "file:///tmp/.com.google.Chrome.UJLJvz"
   }
 }

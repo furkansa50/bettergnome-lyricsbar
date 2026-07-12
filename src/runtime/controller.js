@@ -26,7 +26,7 @@ import { LyricBarIndicator, LyricBarSettingsIndicator } from '../shell/indicator
 import { normalizePanelPosition } from '../domain/settings/normalize.js';
 import { LifecycleRegistry } from './lifecycle.js';
 import { LyricsCache } from './lyrics/cache.js';
-import { LrclibProvider } from './lyrics/lrclib.js';
+import { BetterLyricsProvider } from './lyrics/better-lyrics.js';
 import { LyricsService } from './lyrics/service.js';
 import { RuntimeLogger } from './logger.js';
 import { MprisService } from './mpris/service.js';
@@ -51,7 +51,8 @@ import { SettingsAdapter } from './settings.js';
  *
  * @typedef {Readonly<{
  *   render(viewModel: IndicatorViewModel): void,
- *   setPreferencesAction?(callback: (() => void) | null): void,
+ *   setDetailsActions(actions: import('../shell/details-menu.js').DetailsMenuActions): void,
+ *   renderDetails(state: import('../shell/details-menu.js').DetailsMenuState): void,
  *   destroy(): void,
  * }>} IndicatorHandle
  *
@@ -124,6 +125,12 @@ export class LyricBarController {
 
   /** @type {string | null} */
   #lastSyncedLine = null;
+
+  /** @type {number} */
+  #lastActiveWordIndex = -1;
+
+  /** @type {number | null} */
+  #lastKnownPositionMs = null;
 
   /** @type {string | null} */
   #syncPositionTrackKey = null;
@@ -283,8 +290,9 @@ export class LyricBarController {
     this.#logger?.debug('indicator-mounted', {
       panelPosition: this.#currentSettings.panelPosition,
     });
-    this.#syncIndicatorPreferencesAction();
+    this.#wireDetailsActions(indicator);
     this.#render();
+    this.#renderDetails();
     lifecycle.add(this.#destroyIndicator);
   }
 
@@ -335,7 +343,6 @@ export class LyricBarController {
    * @returns {void}
    */
   #syncSettingsAccess() {
-    this.#syncIndicatorPreferencesAction();
     if (this.#currentSettings?.showSettingsIcon === true) {
       this.#mountSettingsIndicator();
       return;
@@ -344,16 +351,54 @@ export class LyricBarController {
   }
 
   /**
+   * Wire the playback control actions from the active player proxy into the
+   * indicator's details popup. Called once per indicator mount.
+   *
+   * @param {IndicatorHandle} indicator
    * @returns {void}
    */
-  #syncIndicatorPreferencesAction() {
-    this.#indicator?.setPreferencesAction?.(
-      this.#currentSettings?.showSettingsIcon === false
-        ? () => {
-            this.#extension.openPreferences();
-          }
-        : null,
-    );
+  #wireDetailsActions(indicator) {
+    if (typeof indicator.setDetailsActions !== 'function') {
+      return;
+    }
+
+    indicator.setDetailsActions({
+      onPlayPause: () => this.#invokePlayerControl((proxy) => proxy.playPause()),
+      onNext: () => this.#invokePlayerControl((proxy) => proxy.next()),
+      onPrevious: () => this.#invokePlayerControl((proxy) => proxy.previous()),
+      onSeek: (positionMs) => {
+        if (this.#activePlayer === null) {
+          return;
+        }
+        const tracked = this.#proxies.get(this.#activePlayer.busName);
+        tracked?.proxy.setPosition(this.#activePlayer.trackId, positionMs);
+      },
+    });
+  }
+
+  /**
+   * Run a playback control method against the active player's proxy.
+   * Silently no-ops when there is no active player.
+   *
+   * @param {(proxy: import('./mpris/stable-player.js').StablePlayerProxy) => void} fn
+   * @returns {void}
+   */
+  #invokePlayerControl(fn) {
+    if (this.#activePlayer === null) {
+      return;
+    }
+    const tracked = this.#proxies.get(this.#activePlayer.busName);
+    if (tracked === undefined) {
+      return;
+    }
+    try {
+      fn(tracked.proxy);
+    } catch (error) {
+      this.#logger?.debug('player-control-failed', {
+        busName: this.#activePlayer.busName,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   /**
@@ -366,7 +411,10 @@ export class LyricBarController {
     }
 
     const logger = this.#logger?.child('lyrics');
-    const provider = new LrclibProvider(lifecycle, { logger: logger?.child('lrclib') });
+    const provider = new BetterLyricsProvider(lifecycle, {
+      getLyricsSource: () => this.#currentSettings?.lyricsSource ?? 'auto',
+      logger: logger?.child('better-lyrics'),
+    });
     const cache = new LyricsCache(
       lifecycle,
       () => ({
@@ -539,6 +587,7 @@ export class LyricBarController {
     }
 
     this.#render();
+    this.#renderDetails();
   }
 
   /**
@@ -560,12 +609,14 @@ export class LyricBarController {
       title: this.#activePlayer?.title ?? null,
     });
     this.#lastSyncedLine = null;
+    this.#lastActiveWordIndex = -1;
     this.#pollSyncedPosition();
     this.#syncSourceId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, POSITION_POLL_INTERVAL_MS, () => {
       if (!this.#shouldPollSyncedLyrics()) {
         this.#logger?.debug('sync-loop-stop');
         this.#syncSourceId = 0;
         this.#lastSyncedLine = null;
+        this.#lastActiveWordIndex = -1;
         this.#resetSyncPositionOffset();
         return GLib.SOURCE_REMOVE;
       }
@@ -600,6 +651,7 @@ export class LyricBarController {
       this.#syncSourceId = 0;
     }
     this.#lastSyncedLine = null;
+    this.#lastActiveWordIndex = -1;
     this.#resetSyncPositionOffset();
   }
 
@@ -633,20 +685,28 @@ export class LyricBarController {
         return;
       }
 
+      this.#lastKnownPositionMs = effectivePositionMs;
+
       const next = displayStateFromSyncedPosition(player, lookup, effectivePositionMs);
       const line = next.kind === 'lyrics' ? next.line : null;
-      if (line === this.#lastSyncedLine) {
+      const activeWordIndex = next.kind === 'lyrics' ? next.activeWordIndex : -1;
+      if (line === this.#lastSyncedLine && activeWordIndex === this.#lastActiveWordIndex) {
         return;
       }
 
+      const lineChanged = line !== this.#lastSyncedLine;
       this.#lastSyncedLine = line;
-      this.#logger?.debug('sync-line-selected', {
-        positionMs: effectivePositionMs,
-        rawPositionMs: positionMs,
-        text: line,
-      });
+      this.#lastActiveWordIndex = activeWordIndex;
+      if (lineChanged) {
+        this.#logger?.debug('sync-line-selected', {
+          positionMs: effectivePositionMs,
+          rawPositionMs: positionMs,
+          text: line,
+        });
+      }
       this.#displayState = next;
       this.#render();
+      this.#renderDetails();
     });
   }
 
@@ -671,6 +731,7 @@ export class LyricBarController {
       this.#lastAcceptedSyncPositionMs = null;
       this.#syncPositionEstimate = null;
       this.#lastSyncedLine = null;
+      this.#lastActiveWordIndex = -1;
     }
 
     if (this.#syncPositionOffsetMs !== null) {
@@ -780,6 +841,34 @@ export class LyricBarController {
       visible: viewModel.visible,
     });
     this.#indicator.render(viewModel);
+  }
+
+  /**
+   * Push the latest player + lyrics state into the details popup.
+   *
+   * @returns {void}
+   */
+  #renderDetails() {
+    if (!this.#indicator || typeof this.#indicator.renderDetails !== 'function') {
+      return;
+    }
+
+    const player = this.#activePlayer;
+    const lookup = this.#currentLookup;
+    const syncedLookup = lookup !== null && lookup.kind === 'synced' ? lookup : null;
+
+    this.#indicator.renderDetails({
+      title: player?.title ?? null,
+      artist: player?.artist ?? null,
+      album: player?.album ?? null,
+      artUrl: player?.artUrl ?? null,
+      playbackStatus: player?.playbackStatus ?? 'Stopped',
+      positionMs: this.#lastKnownPositionMs,
+      durationMs: player?.durationMs ?? syncedLookup?.track.durationMs ?? null,
+      trackId: player?.trackId ?? null,
+      lyrics: syncedLookup,
+      activeLine: this.#displayState.kind === 'lyrics' ? this.#displayState.line : null,
+    });
   }
 }
 

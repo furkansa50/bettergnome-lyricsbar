@@ -41,8 +41,8 @@ if (!(await fileExists(schemaPath))) {
   failures.push(`metadata.json settings-schema points to missing schema file: ${schemaPath}`);
 }
 
-if (metadata.uuid !== 'lyricbar@fikrilal.github.io') {
-  failures.push('metadata.json uuid must remain stable: lyricbar@fikrilal.github.io');
+if (metadata.uuid !== 'betterlyricsbar@furkansa50') {
+  failures.push('metadata.json uuid must remain stable: betterlyricsbar@furkansa50');
 }
 
 const supportedShellVersions = ['46', '47', '48', '49'];

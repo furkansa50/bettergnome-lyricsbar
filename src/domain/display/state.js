@@ -25,9 +25,16 @@ function escapeMarkup(text) {
 /**
  * @param {DisplayState} state
  * @param {FallbackMode} fallbackMode
+ * @param {import('../settings/types.js').TextColorMode} [textColorMode]
+ * @param {string} [customTextColor]
  * @returns {DisplayText}
  */
-export function formatDisplayState(state, fallbackMode) {
+export function formatDisplayState(
+  state,
+  fallbackMode,
+  textColorMode = 'default',
+  customTextColor = '',
+) {
   if (state.kind === 'hidden') {
     return hiddenText();
   }
@@ -37,6 +44,14 @@ export function formatDisplayState(state, fallbackMode) {
     if (line !== '') {
       // If we have word-level timings and a valid highlighted word index
       if (state.words && state.words.length > 0) {
+        let baseColor = '#ffffff';
+        if (textColorMode === 'black') {
+          baseColor = '#000000';
+        } else if (textColorMode === 'custom' && /^#[0-9a-fA-F]{6}$/.test(customTextColor)) {
+          baseColor = customTextColor;
+        }
+        const dimmedColor = `${baseColor}59`; // 35% alpha
+
         const wordMarkup = state.words.map(
           /**
            * @param {import('../lyrics/types.js').WordTiming} w
@@ -45,11 +60,15 @@ export function formatDisplayState(state, fallbackMode) {
           (w, idx) => {
             const escapedWord = escapeMarkup(w.text);
             if (idx === state.activeWordIndex) {
-              // Active word: bold
-              return `<span weight="bold">${escapedWord}</span>`;
+              // Active word: bold, full opacity
+              return `<span foreground="${baseColor}" weight="bold">${escapedWord}</span>`;
             }
-            // Inactive words: translucent/dimmed
-            return `<span alpha="35%">${escapedWord}</span>`;
+            if (idx < state.activeWordIndex) {
+              // Past words: normal weight, full opacity
+              return `<span foreground="${baseColor}">${escapedWord}</span>`;
+            }
+            // Future words: translucent/dimmed
+            return `<span foreground="${dimmedColor}">${escapedWord}</span>`;
           },
         );
         return { text: wordMarkup.join(' '), visible: true };

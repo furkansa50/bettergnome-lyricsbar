@@ -23,6 +23,8 @@
  * @typedef {Readonly<{
  *   kind: 'lyrics',
  *   line: string,
+ *   words: readonly import('../lyrics/types.js').WordTiming[],
+ *   activeWordIndex: number,
  *   track?: DisplayTrack | null,
  * }>} LyricsDisplayState
  *

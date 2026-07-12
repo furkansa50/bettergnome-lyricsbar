@@ -83,11 +83,14 @@ function settings(playerPriority, overrides = {}) {
     showSettingsIcon: true,
     playerPriority,
     browserPlayerService: 'spotify',
+    lyricsSource: 'auto',
     cacheEnabled: true,
     debugLogging: false,
     textColorMode: 'default',
     customTextColor: '#ffffff',
     textShadowEnabled: true,
+    glowStrength: 1.0,
+    autoWidth: false,
     ...overrides,
   };
 }

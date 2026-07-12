@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly EXTENSION_UUID="lyricbar@fikrilal.github.io"
-readonly REPOSITORY="fikrilal/gnome-lyricbar"
+readonly EXTENSION_UUID="betterlyricsbar@furkansa50"
+readonly REPOSITORY="furkansa50/bettergnome-lyricbar"
 readonly ASSET_NAME="${EXTENSION_UUID}.zip"
 readonly DEFAULT_VERSION="latest"
 readonly EXTENSION_DIR="${HOME}/.local/share/gnome-shell/extensions/${EXTENSION_UUID}"

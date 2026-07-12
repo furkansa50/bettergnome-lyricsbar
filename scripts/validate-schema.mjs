@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 
 import { readText, repoPath } from './lib/repo.mjs';
 
-const schemaPath = 'schemas/org.gnome.shell.extensions.lyricbar.gschema.xml';
+const schemaPath = 'schemas/org.gnome.shell.extensions.betterlyricsbar.gschema.xml';
 const schema = await readText(schemaPath);
 const failures = [];
 
@@ -18,12 +18,12 @@ const requiredKeys = [
   'debug-logging',
 ];
 
-if (!schema.includes('id="org.gnome.shell.extensions.lyricbar"')) {
-  failures.push('Schema id must be org.gnome.shell.extensions.lyricbar.');
+if (!schema.includes('id="org.gnome.shell.extensions.betterlyricsbar"')) {
+  failures.push('Schema id must be org.gnome.shell.extensions.betterlyricsbar.');
 }
 
-if (!schema.includes('path="/org/gnome/shell/extensions/lyricbar/"')) {
-  failures.push('Schema path must be /org/gnome/shell/extensions/lyricbar/.');
+if (!schema.includes('path="/org/gnome/shell/extensions/betterlyricsbar/"')) {
+  failures.push('Schema path must be /org/gnome/shell/extensions/betterlyricsbar/.');
 }
 
 for (const key of requiredKeys) {

@@ -29,6 +29,7 @@ describe('parseLrclibResponse', () => {
         { timeMs: 1000, text: 'Look at the stars' },
         { timeMs: 4500, text: 'Look how they shine for you' },
       ],
+      wordLines: [],
       plainText: 'Look at the stars\nLook how they shine for you',
     });
   });

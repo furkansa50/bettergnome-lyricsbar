@@ -311,6 +311,25 @@ describe('StablePlayerProxy', () => {
     harness.lifecycle.dispose();
     expect(harness.scheduler.pendingCount()).toBe(0);
   });
+
+  it('delegates control methods to raw player', () => {
+    const harness = createHarness({
+      busName: 'org.mpris.MediaPlayer2.spotify',
+      nowMs: 1000,
+    });
+
+    harness.stable.playPause();
+    expect(harness.raw.playPause).toHaveBeenCalledTimes(1);
+
+    harness.stable.next();
+    expect(harness.raw.next).toHaveBeenCalledTimes(1);
+
+    harness.stable.previous();
+    expect(harness.raw.previous).toHaveBeenCalledTimes(1);
+
+    harness.stable.setPosition('/track/1', 1234);
+    expect(harness.raw.setPosition).toHaveBeenLastCalledWith('/track/1', 1234);
+  });
 });
 
 /**
@@ -349,6 +368,10 @@ function createHarness(options) {
  *   readPosition: ReturnType<typeof vi.fn>,
  *   refreshProperties: ReturnType<typeof vi.fn>,
  *   start: ReturnType<typeof vi.fn>,
+ *   playPause: ReturnType<typeof vi.fn>,
+ *   next: ReturnType<typeof vi.fn>,
+ *   previous: ReturnType<typeof vi.fn>,
+ *   setPosition: ReturnType<typeof vi.fn>,
  *   emit(snapshot: PlayerSnapshot | null): void,
  * }}
  */
@@ -368,6 +391,10 @@ function createRawPlayer(busName) {
     readPosition: vi.fn(),
     refreshProperties: vi.fn(),
     start: vi.fn(),
+    playPause: vi.fn(),
+    next: vi.fn(),
+    previous: vi.fn(),
+    setPosition: vi.fn(),
     emit(snapshotValue) {
       currentSnapshot = snapshotValue;
       for (const listener of listeners) {
@@ -434,6 +461,7 @@ function snapshot(overrides) {
     durationMs: 277991,
     trackId: '/org/chromium/MediaPlayer2/TrackList/Nina',
     url: null,
+    artUrl: null,
     playbackStatus: 'Playing',
     ...overrides,
   };

@@ -42,6 +42,7 @@ describe('mapMprisProperties', () => {
       durationMs: 201000,
       trackId: '/com/spotify/track/abc',
       url: 'https://open.spotify.com/track/abc',
+      artUrl: null,
       playbackStatus: 'Playing',
     });
   });
@@ -67,6 +68,7 @@ describe('mapMprisProperties', () => {
       durationMs: 202000,
       trackId: '/org/mpris/MediaPlayer2/firefox',
       url: 'https://music.youtube.com/watch?v=snx5qGUtVi8&list=RDAMVMBLZWkjBXfN8',
+      artUrl: null,
       playbackStatus: 'Playing',
     });
   });
@@ -92,6 +94,7 @@ describe('mapMprisProperties', () => {
       durationMs: 212953,
       trackId: '/com/spotify/track/4Gg1tYCl7rWR4laKbdtPA4',
       url: 'https://open.spotify.com/track/4Gg1tYCl7rWR4laKbdtPA4',
+      artUrl: null,
       playbackStatus: 'Playing',
     });
   });
@@ -105,6 +108,7 @@ describe('mapMprisProperties', () => {
       durationMs: null,
       trackId: null,
       url: null,
+      artUrl: null,
       playbackStatus: 'Stopped',
     });
   });
@@ -135,6 +139,7 @@ describe('mapMprisProperties', () => {
       durationMs: null,
       trackId: null,
       url: null,
+      artUrl: null,
       playbackStatus: 'Stopped',
     });
   });
@@ -149,6 +154,7 @@ describe('applyPropertyChanges', () => {
     durationMs: 100000,
     trackId: '/old',
     url: 'https://open.spotify.com/track/old',
+    artUrl: null,
     playbackStatus: 'Playing',
   });
 
@@ -172,6 +178,7 @@ describe('applyPropertyChanges', () => {
       durationMs: 150000,
       trackId: '/new',
       url: 'https://open.spotify.com/track/new',
+      artUrl: null,
       playbackStatus: 'Playing',
     });
   });
@@ -223,6 +230,7 @@ describe('applyPropertyChanges', () => {
       durationMs: 195000,
       trackId: '/com/spotify/track/new',
       url: 'https://open.spotify.com/track/new',
+      artUrl: null,
       playbackStatus: 'Playing',
     });
   });
@@ -242,6 +250,7 @@ describe('snapshotsEqual', () => {
     durationMs: 200000,
     trackId: '/track',
     url: 'https://open.spotify.com/track/abc',
+    artUrl: null,
     playbackStatus: 'Playing',
   });
 
@@ -252,6 +261,9 @@ describe('snapshotsEqual', () => {
   it('returns false when any tracked field differs', () => {
     expect(snapshotsEqual(snapshot, { ...snapshot, title: 'Other' })).toBe(false);
     expect(snapshotsEqual(snapshot, { ...snapshot, url: 'https://example.com/other' })).toBe(false);
+    expect(snapshotsEqual(snapshot, { ...snapshot, artUrl: 'https://example.com/art' })).toBe(
+      false,
+    );
     expect(snapshotsEqual(snapshot, { ...snapshot, playbackStatus: 'Paused' })).toBe(false);
   });
 
