@@ -57,4 +57,32 @@ describe('parseTtml', () => {
       { timeMs: 30180, text: 'No spans here' },
     ]);
   });
+
+  it('decodes XML character references in words and lines', () => {
+    const ttml = `
+      <p begin="1.000" end="2.000">
+        <span begin="1.000" end="1.500">don&#39;t</span>
+        <span begin="1.500" end="2.000">me &amp; you</span>
+      </p>
+      <p begin="3.000" end="4.000">&quot;Hello&quot; &#x2014; it&apos;s me</p>
+    `;
+
+    const result = parseTtml(ttml);
+
+    expect(result[0]?.words.map((word) => word.text)).toEqual(["don't", 'me & you']);
+    expect(result[0]?.text).toBe("don't me & you");
+    expect(result[1]?.text).toBe('"Hello" — it\'s me');
+  });
+
+  it('decodes &amp; last so double-encoded references survive one pass', () => {
+    const result = parseTtml('<p begin="1.000" end="2.000">a&amp;#39;b</p>');
+
+    expect(result[0]?.text).toBe('a&#39;b');
+  });
+
+  it('leaves out-of-range character references untouched', () => {
+    const result = parseTtml('<p begin="1.000" end="2.000">&#0; &#1114112;</p>');
+
+    expect(result[0]?.text).toBe('&#0; &#1114112;');
+  });
 });

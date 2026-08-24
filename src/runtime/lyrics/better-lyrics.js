@@ -2,6 +2,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Soup from 'gi://Soup';
 
+import { parseLrc } from '../../domain/lyrics/lrc.js';
 import { parseTtml, wordLinesToLyricLines } from '../../domain/lyrics/ttml.js';
 import { buildUnisonUrl, buildBetterLyricsUrl } from './better-lyrics-url.js';
 import { LrclibProvider } from './lrclib.js';
@@ -40,6 +41,15 @@ export class BetterLyricsProvider {
   #getLyricsSource;
 
   /**
+   * In-flight HTTP requests. Tracked in one set instead of registering a
+   * lifecycle cleanup per request, which would grow the registry unbounded
+   * across track changes.
+   *
+   * @type {Set<{ cancellable: any, cancelTimeout: () => void }>}
+   */
+  #inflight = new Set();
+
+  /**
    * @param {LifecycleRegistry} lifecycle
    * @param {{ session?: any, timeoutMs?: number, logger?: RuntimeLogger | undefined, getLyricsSource?: () => import('../../domain/settings/types.js').LyricsSource }} [options]
    */
@@ -68,6 +78,7 @@ export class BetterLyricsProvider {
     this.#lifecycle.add(() => {
       this.#logger?.debug('provider-dispose');
       this.#enabled = false;
+      this.#abortInflight();
       try {
         this.#session?.abort?.();
       } catch {
@@ -75,6 +86,23 @@ export class BetterLyricsProvider {
       }
       this.#session = null;
     });
+  }
+
+  /**
+   * Cancel every in-flight request and drop its timeout source.
+   *
+   * @returns {void}
+   */
+  #abortInflight() {
+    for (const entry of [...this.#inflight]) {
+      this.#inflight.delete(entry);
+      entry.cancelTimeout();
+      try {
+        entry.cancellable.cancel();
+      } catch {
+        // already cancelled
+      }
+    }
   }
 
   /**
@@ -177,7 +205,7 @@ export class BetterLyricsProvider {
         return;
       }
 
-      const unisonParsed = this.#parseUnisonResponse(unisonResult);
+      const unisonParsed = this.#parseUnisonResponse(unisonResult, query);
       if (unisonParsed !== null) {
         this.#logger?.debug('unison-hit', { kind: unisonParsed.kind });
         callback(unisonParsed);
@@ -197,7 +225,7 @@ export class BetterLyricsProvider {
    */
   #fallbackToLrclib(query, callback, allowLrclibFallback) {
     if (allowLrclibFallback) {
-      this.#logger?.debug('unison-miss-fallback-to-lrclib');
+      this.#logger?.debug('fallback-to-lrclib');
       this.#lrclibProvider.lookup(query, callback);
       return;
     }
@@ -209,10 +237,15 @@ export class BetterLyricsProvider {
    *   success: { success: true, lyrics: "<ttml or lrc>", ... }
    *   failure: { success: false, error: "...", code: "NOT_FOUND" }
    *
+   * The payload may be TTML (word-level) or plain LRC, so both are attempted.
+   * Track info comes from the query: downstream sync policies need a real
+   * duration to normalize cumulative browser positions.
+   *
    * @param {{ statusCode?: number | null, body?: string | null, error?: string | null }} result
+   * @param {LyricsQuery} query
    * @returns {LyricsProviderResult | null}
    */
-  #parseUnisonResponse(result) {
+  #parseUnisonResponse(result, query) {
     if (result.error || result.statusCode === null || result.statusCode !== 200) {
       return null;
     }
@@ -238,13 +271,15 @@ export class BetterLyricsProvider {
       return null;
     }
 
-    // Try TTML parsing
-    return this.#parseTtmlToResult(lyricsContent, {
-      trackName: '',
-      artistName: '',
-      albumName: '',
-      durationMs: null,
-    });
+    /** @type {import('../../domain/lyrics/types.js').ProviderTrackInfo} */
+    const track = {
+      trackName: query.title,
+      artistName: query.artist,
+      albumName: query.album,
+      durationMs: query.durationMs,
+    };
+
+    return this.#parseTtmlToResult(lyricsContent, track) ?? parseLrcToResult(lyricsContent, track);
   }
 
   /**
@@ -356,12 +391,13 @@ export class BetterLyricsProvider {
     this.#logger?.debug('request-send');
 
     const cancellable = new Gio.Cancellable();
-    this.#lifecycle.addCancellable(() => cancellable);
 
     const timeoutMs = this.#timeoutMs;
     let timedOut = false;
-    const timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, timeoutMs, () => {
+    /** @type {number} */
+    let timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, timeoutMs, () => {
       timedOut = true;
+      timeoutId = 0;
       try {
         cancellable.cancel();
       } catch {
@@ -369,10 +405,24 @@ export class BetterLyricsProvider {
       }
       return GLib.SOURCE_REMOVE;
     });
-    this.#lifecycle.addSource(
-      () => timeoutId,
-      (id) => GLib.source_remove(id),
-    );
+
+    const cancelTimeout = () => {
+      if (timeoutId === 0) {
+        return;
+      }
+      const id = timeoutId;
+      timeoutId = 0;
+      try {
+        GLib.source_remove(id);
+      } catch {
+        // already removed when the timeout fired
+      }
+    };
+
+    // Track the request so disable() can cancel it. Registering per-request
+    // lifecycle entries would leak one entry per lookup for the whole session.
+    const entry = { cancellable, cancelTimeout };
+    this.#inflight.add(entry);
 
     const headers = message.get_request_headers?.();
     headers?.append?.('User-Agent', USER_AGENT);
@@ -388,11 +438,8 @@ export class BetterLyricsProvider {
        * @returns {void}
        */
       (_source, result) => {
-        try {
-          GLib.source_remove(timeoutId);
-        } catch {
-          // already removed when timeout fired
-        }
+        this.#inflight.delete(entry);
+        cancelTimeout();
 
         if (!this.#enabled || cancellable.is_cancelled?.() === true) {
           if (timedOut) {
@@ -422,6 +469,29 @@ export class BetterLyricsProvider {
       },
     );
   }
+}
+
+/**
+ * Build a synced result from an LRC payload. LRC carries no word-level timing,
+ * so `wordLines` is empty and the display layer falls back to line highlight.
+ *
+ * @param {string} lrc
+ * @param {import('../../domain/lyrics/types.js').ProviderTrackInfo} track
+ * @returns {LyricsProviderResult | null}
+ */
+function parseLrcToResult(lrc, track) {
+  const lines = parseLrc(lrc);
+  if (lines.length === 0) {
+    return null;
+  }
+
+  return Object.freeze({
+    kind: 'synced',
+    track: Object.freeze(track),
+    lines: Object.freeze(lines),
+    wordLines: Object.freeze([]),
+    plainText: lines.map((line) => line.text).join('\n'),
+  });
 }
 
 /**

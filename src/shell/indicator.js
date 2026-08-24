@@ -336,6 +336,12 @@ function setLabelText(label, text) {
     setter.call(label, text);
   }
 
+  // Only reachable when markup was unavailable; `clutter_text` may legitimately
+  // be absent here, and Reflect.get would throw on null.
+  if (clutterText === null || clutterText === undefined) {
+    return;
+  }
+
   const clutterSetter = Reflect.get(/** @type {object} */ (clutterText), 'set_text');
   if (typeof clutterSetter === 'function') {
     clutterSetter.call(clutterText, text);

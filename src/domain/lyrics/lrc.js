@@ -46,20 +46,35 @@ export function parseLrc(input) {
  * @returns {LyricLine | null}
  */
 export function selectLyricLine(lines, positionMs) {
+  const index = selectLyricLineIndex(lines, positionMs);
+  return index === -1 ? null : (lines[index] ?? null);
+}
+
+/**
+ * Index of the active line, or -1 when none applies.
+ *
+ * Callers that need to highlight one row of a full lyrics list must use the
+ * index: matching on line text highlights every repeat of a chorus.
+ *
+ * @param {readonly LyricLine[]} lines
+ * @param {number} positionMs
+ * @returns {number}
+ */
+export function selectLyricLineIndex(lines, positionMs) {
   if (lines.length === 0) {
-    return null;
+    return -1;
   }
 
   if (!Number.isFinite(positionMs) || positionMs < 0) {
-    return null;
+    return -1;
   }
 
-  let current = null;
-  for (const line of lines) {
+  let current = -1;
+  for (const [index, line] of lines.entries()) {
     if (line.timeMs > positionMs) {
       break;
     }
-    current = line;
+    current = index;
   }
 
   return current;

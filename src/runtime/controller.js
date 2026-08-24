@@ -14,8 +14,12 @@ import {
   shouldUseSyncedLyricsPosition,
 } from '../domain/display/sync-position-policy.js';
 import { updateStagnantSyncedPositionEstimate } from '../domain/display/sync-position-estimator.js';
-import { shouldPollSyncedLyrics } from '../domain/display/sync-polling.js';
+import {
+  shouldPollPlayerPosition,
+  shouldPollSyncedLyrics,
+} from '../domain/display/sync-polling.js';
 import { buildIndicatorViewModel } from '../domain/display/view-model.js';
+import { selectLyricLineIndex } from '../domain/lyrics/lrc.js';
 import { selectActivePlayer } from '../domain/mpris/selection.js';
 import {
   shouldRefreshPlayerSelection,
@@ -132,6 +136,15 @@ export class LyricBarController {
   /** @type {number | null} */
   #lastKnownPositionMs = null;
 
+  /**
+   * Identity of the track `#lastKnownPositionMs` belongs to. Used to drop the
+   * cached position when the popup's subject changes, so the progress bar does
+   * not keep showing the previous track's elapsed time.
+   *
+   * @type {string | null}
+   */
+  #lastPositionTrackKey = null;
+
   /** @type {string | null} */
   #syncPositionTrackKey = null;
 
@@ -235,6 +248,8 @@ export class LyricBarController {
     this.#activePlayer = null;
     this.#currentLookup = null;
     this.#stopSyncLoop();
+    this.#lastKnownPositionMs = null;
+    this.#lastPositionTrackKey = null;
     this.#displayState = { kind: 'idle' };
     lifecycle?.dispose();
     this.#indicator = null;
@@ -367,11 +382,9 @@ export class LyricBarController {
       onNext: () => this.#invokePlayerControl((proxy) => proxy.next()),
       onPrevious: () => this.#invokePlayerControl((proxy) => proxy.previous()),
       onSeek: (positionMs) => {
-        if (this.#activePlayer === null) {
-          return;
-        }
-        const tracked = this.#proxies.get(this.#activePlayer.busName);
-        tracked?.proxy.setPosition(this.#activePlayer.trackId, positionMs);
+        this.#invokePlayerControl((proxy) => {
+          proxy.setPosition(this.#activePlayer?.trackId ?? null, positionMs);
+        });
       },
     });
   }
@@ -560,6 +573,7 @@ export class LyricBarController {
     });
 
     this.#activePlayer = active;
+    this.#invalidateStalePosition();
     if (this.#lyricsService !== null) {
       this.#lyricsService.setActivePlayer(active);
     } else {
@@ -576,6 +590,8 @@ export class LyricBarController {
       return;
     }
 
+    this.#invalidateStalePosition();
+
     if (this.#activePlayer === null) {
       this.#displayState = displayStateFromPlayer(null);
     } else if (this.#currentLookup === null) {
@@ -591,10 +607,36 @@ export class LyricBarController {
   }
 
   /**
+   * Forget the cached position when it no longer describes the active track.
+   *
+   * @returns {void}
+   */
+  #invalidateStalePosition() {
+    const player = this.#activePlayer;
+    const key =
+      player === null
+        ? null
+        : [player.busName, player.trackId, player.title, player.artist].join(' ');
+
+    if (key === this.#lastPositionTrackKey) {
+      return;
+    }
+
+    this.#lastPositionTrackKey = key;
+    this.#lastKnownPositionMs = null;
+  }
+
+  /**
+   * Start or stop the position poll.
+   *
+   * The loop drives two consumers: synced-lyric line selection for the panel
+   * label, and the elapsed clock plus progress bar in the details popup. Either
+   * one is reason enough to keep polling.
+   *
    * @returns {void}
    */
   #updateSyncLoop() {
-    if (!this.#shouldPollSyncedLyrics()) {
+    if (!this.#shouldPollPosition()) {
       this.#stopSyncLoop();
       return;
     }
@@ -610,9 +652,9 @@ export class LyricBarController {
     });
     this.#lastSyncedLine = null;
     this.#lastActiveWordIndex = -1;
-    this.#pollSyncedPosition();
+    this.#pollPosition();
     this.#syncSourceId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, POSITION_POLL_INTERVAL_MS, () => {
-      if (!this.#shouldPollSyncedLyrics()) {
+      if (!this.#shouldPollPosition()) {
         this.#logger?.debug('sync-loop-stop');
         this.#syncSourceId = 0;
         this.#lastSyncedLine = null;
@@ -620,9 +662,19 @@ export class LyricBarController {
         this.#resetSyncPositionOffset();
         return GLib.SOURCE_REMOVE;
       }
-      this.#pollSyncedPosition();
+      this.#pollPosition();
       return GLib.SOURCE_CONTINUE;
     });
+  }
+
+  /**
+   * @returns {boolean}
+   */
+  #shouldPollPosition() {
+    return (
+      this.#shouldPollSyncedLyrics() ||
+      shouldPollPlayerPosition({ enabled: this.#enabled, player: this.#activePlayer })
+    );
   }
 
   /**
@@ -656,56 +708,68 @@ export class LyricBarController {
   }
 
   /**
+   * Read the player position and update whatever depends on it.
+   *
    * @returns {void}
    */
-  #pollSyncedPosition() {
+  #pollPosition() {
     const player = this.#activePlayer;
-    const lookup = this.#currentLookup;
-    if (player === null || lookup?.kind !== 'synced') {
+    if (player === null) {
       return;
     }
 
+    const lookup = this.#currentLookup;
     const tracked = this.#proxies.get(player.busName);
     if (tracked === undefined) {
       return;
     }
 
     tracked.proxy.readPosition((positionMs) => {
-      if (
-        !this.#shouldPollSyncedLyrics() ||
-        this.#activePlayer !== player ||
-        this.#currentLookup !== lookup ||
-        positionMs === null
-      ) {
+      if (!this.#enabled || this.#activePlayer !== player || positionMs === null) {
         return;
       }
 
-      const effectivePositionMs = this.#resolveSyncedPosition(player, lookup, positionMs);
+      const syncedLookup =
+        lookup !== null && lookup.kind === 'synced' && this.#currentLookup === lookup
+          ? lookup
+          : null;
+
+      if (syncedLookup === null || !this.#shouldPollSyncedLyrics()) {
+        // No synced lyrics to advance: the position still feeds the popup's
+        // elapsed clock and progress bar.
+        this.#lastKnownPositionMs = positionMs;
+        this.#renderDetails();
+        return;
+      }
+
+      const effectivePositionMs = this.#resolveSyncedPosition(player, syncedLookup, positionMs);
       if (effectivePositionMs === null) {
         return;
       }
 
       this.#lastKnownPositionMs = effectivePositionMs;
 
-      const next = displayStateFromSyncedPosition(player, lookup, effectivePositionMs);
+      const next = displayStateFromSyncedPosition(player, syncedLookup, effectivePositionMs);
       const line = next.kind === 'lyrics' ? next.line : null;
       const activeWordIndex = next.kind === 'lyrics' ? next.activeWordIndex : -1;
-      if (line === this.#lastSyncedLine && activeWordIndex === this.#lastActiveWordIndex) {
-        return;
+
+      if (line !== this.#lastSyncedLine || activeWordIndex !== this.#lastActiveWordIndex) {
+        const lineChanged = line !== this.#lastSyncedLine;
+        this.#lastSyncedLine = line;
+        this.#lastActiveWordIndex = activeWordIndex;
+        if (lineChanged) {
+          this.#logger?.debug('sync-line-selected', {
+            positionMs: effectivePositionMs,
+            rawPositionMs: positionMs,
+            text: line,
+          });
+        }
+        this.#displayState = next;
+        this.#render();
       }
 
-      const lineChanged = line !== this.#lastSyncedLine;
-      this.#lastSyncedLine = line;
-      this.#lastActiveWordIndex = activeWordIndex;
-      if (lineChanged) {
-        this.#logger?.debug('sync-line-selected', {
-          positionMs: effectivePositionMs,
-          rawPositionMs: positionMs,
-          text: line,
-        });
-      }
-      this.#displayState = next;
-      this.#render();
+      // The popup's clock and progress bar advance on every tick, not only when
+      // the active line changes.
       this.#renderDetails();
     });
   }
@@ -856,6 +920,14 @@ export class LyricBarController {
     const player = this.#activePlayer;
     const lookup = this.#currentLookup;
     const syncedLookup = lookup !== null && lookup.kind === 'synced' ? lookup : null;
+    const positionMs = this.#lastKnownPositionMs;
+
+    // The popup highlights by index, not by text: a repeated chorus otherwise
+    // lights up every one of its occurrences and auto-scroll jumps to the first.
+    const activeLineIndex =
+      syncedLookup !== null && positionMs !== null
+        ? selectLyricLineIndex(syncedLookup.lines, positionMs)
+        : -1;
 
     this.#indicator.renderDetails({
       title: player?.title ?? null,
@@ -863,11 +935,11 @@ export class LyricBarController {
       album: player?.album ?? null,
       artUrl: player?.artUrl ?? null,
       playbackStatus: player?.playbackStatus ?? 'Stopped',
-      positionMs: this.#lastKnownPositionMs,
+      positionMs,
       durationMs: player?.durationMs ?? syncedLookup?.track.durationMs ?? null,
       trackId: player?.trackId ?? null,
       lyrics: syncedLookup,
-      activeLine: this.#displayState.kind === 'lyrics' ? this.#displayState.line : null,
+      activeLineIndex,
     });
   }
 }

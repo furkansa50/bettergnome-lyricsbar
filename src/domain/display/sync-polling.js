@@ -31,3 +31,23 @@ export function shouldPollSyncedLyrics(state) {
     })
   );
 }
+
+/**
+ * The details popup shows a live clock and progress bar for whatever is
+ * playing, including tracks with no synced lyrics and players with no
+ * recognized profile. Position must therefore be polled independently of
+ * {@link shouldPollSyncedLyrics}.
+ *
+ * Only advancing players qualify: a paused or stopped position does not move,
+ * so the last value already on screen stays correct and the poll would be pure
+ * D-Bus traffic.
+ *
+ * @param {{
+ *   enabled: boolean,
+ *   player: PlayerSnapshot | null,
+ * }} state
+ * @returns {boolean}
+ */
+export function shouldPollPlayerPosition(state) {
+  return state.enabled && state.player !== null && state.player.playbackStatus === 'Playing';
+}

@@ -11,6 +11,12 @@ declare module 'gi://Clutter' {
       END: unknown;
       FILL: unknown;
     };
+    Orientation: {
+      HORIZONTAL: unknown;
+      VERTICAL: unknown;
+    };
+    EVENT_PROPAGATE: unknown;
+    EVENT_STOP: unknown;
   };
   export default Clutter;
 }
@@ -86,12 +92,25 @@ declare module 'gi://St' {
   }
 
   export class BoxLayout {
-    constructor(config?: { style_class?: string });
+    constructor(config?: {
+      style_class?: string;
+      reactive?: boolean;
+      x_expand?: boolean;
+      y_expand?: boolean;
+      vertical?: boolean;
+      orientation?: unknown;
+    });
+
+    orientation: unknown;
+    width: number;
 
     set_vertical(vertical: boolean): void;
     add_child(actor: unknown): void;
     get_children(): unknown[] | null;
     destroy_all_children(): void;
+    get_width(): number;
+    connect(signal: string, callback: (...args: any[]) => any): number;
+    disconnect(id: number): void;
   }
 
   export class Label {
@@ -101,6 +120,8 @@ declare module 'gi://St' {
     style: string;
 
     set_text(text: string): void;
+    add_style_class_name(name: string): void;
+    remove_style_class_name(name: string): void;
   }
 
   export class Icon {
@@ -110,6 +131,8 @@ declare module 'gi://St' {
       icon_name?: string;
       icon_size?: number;
     });
+
+    gicon: unknown;
 
     set_icon_name(name: string): void;
   }
@@ -124,12 +147,22 @@ declare module 'gi://St' {
   }
 
   export class Widget {
-    constructor(config?: { style_class?: string; reactive?: boolean; style?: string });
+    constructor(config?: {
+      style_class?: string;
+      reactive?: boolean;
+      style?: string;
+      width?: number;
+      height?: number;
+      x_expand?: boolean;
+      y_expand?: boolean;
+    });
 
     y: number;
+    width: number;
     height: number;
 
     set_style(style: string): void;
+    set_width(width: number): void;
     add_child(actor: unknown): void;
     remove_child(actor: unknown): void;
     get_child(): unknown | null;
@@ -144,6 +177,9 @@ declare module 'gi://St' {
       style?: string;
     });
 
+    readonly vadjustment: unknown;
+
+    set_child(actor: unknown): void;
     add_child(actor: unknown): void;
     get_vscroll_bar(): { get_adjustment(): unknown | null } | null;
   }
@@ -226,6 +262,7 @@ declare module 'resource:///org/gnome/shell/ui/popupMenu.js' {
   }
   export class PopupMenuSection {
     addMenuItem(item: unknown, position?: number): void;
+    destroy(): void;
     readonly section: unknown;
   }
   export class PopupBaseMenuItem {

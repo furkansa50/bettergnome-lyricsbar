@@ -172,11 +172,67 @@ function secondsToMs(value) {
 }
 
 /**
- * Strip XML/HTML tags from a string.
+ * Strip XML/HTML tags from a string and decode XML character references.
+ *
+ * TTML payloads escape lyric punctuation (`&#39;`, `&amp;`, `&quot;`), so the
+ * raw text must be decoded here. Leaving it encoded is visible to the user:
+ * the display layer escapes text again for Pango markup, which would turn
+ * `&#39;` into a literal `&#39;` on screen instead of an apostrophe.
  *
  * @param {string} value
  * @returns {string}
  */
 function stripTags(value) {
-  return value.replace(/<[^>]*>/g, '').trim();
+  return decodeXmlEntities(value.replace(/<[^>]*>/g, '')).trim();
+}
+
+/** Named XML entities that may appear in TTML lyric text. */
+const NAMED_ENTITIES = Object.freeze({
+  quot: '"',
+  apos: "'",
+  lt: '<',
+  gt: '>',
+  nbsp: ' ',
+});
+
+/**
+ * Decode XML character references and the named entities allowed in TTML.
+ *
+ * `&amp;` is decoded last so that double-encoded input (`&amp;#39;`) resolves
+ * to `&#39;` rather than collapsing straight to `'`.
+ *
+ * @param {string} value
+ * @returns {string}
+ */
+function decodeXmlEntities(value) {
+  if (!value.includes('&')) {
+    return value;
+  }
+
+  return value
+    .replace(/&#(\d+);/g, (match, digits) => codePointToString(Number.parseInt(digits, 10), match))
+    .replace(/&#[xX]([0-9a-fA-F]+);/g, (match, hex) =>
+      codePointToString(Number.parseInt(hex, 16), match),
+    )
+    .replace(/&(quot|apos|lt|gt|nbsp);/g, (match, name) => {
+      const replacement = Reflect.get(NAMED_ENTITIES, String(name));
+      return typeof replacement === 'string' ? replacement : match;
+    })
+    .replaceAll('&amp;', '&');
+}
+
+/**
+ * @param {number} codePoint
+ * @param {string} fallback Original reference, returned when out of range.
+ * @returns {string}
+ */
+function codePointToString(codePoint, fallback) {
+  if (!Number.isInteger(codePoint) || codePoint < 1 || codePoint > 0x10ffff) {
+    return fallback;
+  }
+  try {
+    return String.fromCodePoint(codePoint);
+  } catch {
+    return fallback;
+  }
 }

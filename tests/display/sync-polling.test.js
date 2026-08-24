@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { shouldPollSyncedLyrics } from '../../src/domain/display/sync-polling.js';
+import {
+  shouldPollPlayerPosition,
+  shouldPollSyncedLyrics,
+} from '../../src/domain/display/sync-polling.js';
 
 /**
  * @import { LyricsProviderResult } from '../../src/domain/lyrics/types.js'
@@ -86,6 +89,53 @@ describe('shouldPollSyncedLyrics', () => {
         browserPlayerService: 'apple-music',
       }),
     ).toBe(true);
+  });
+});
+
+describe('shouldPollPlayerPosition', () => {
+  it('polls while a player is advancing so the popup clock stays live', () => {
+    expect(
+      shouldPollPlayerPosition({
+        enabled: true,
+        player: snapshot({ playbackStatus: 'Playing' }),
+      }),
+    ).toBe(true);
+  });
+
+  it('polls regardless of whether lyrics were found', () => {
+    // Unlike shouldPollSyncedLyrics this takes no lookup: the progress bar has
+    // to advance for instrumental tracks and lyric misses too.
+    expect(
+      shouldPollPlayerPosition({
+        enabled: true,
+        player: snapshot({ busName: 'org.mpris.MediaPlayer2.spotify' }),
+      }),
+    ).toBe(true);
+  });
+
+  it('does not poll a paused or stopped player', () => {
+    expect(
+      shouldPollPlayerPosition({
+        enabled: true,
+        player: snapshot({ playbackStatus: 'Paused' }),
+      }),
+    ).toBe(false);
+    expect(
+      shouldPollPlayerPosition({
+        enabled: true,
+        player: snapshot({ playbackStatus: 'Stopped' }),
+      }),
+    ).toBe(false);
+  });
+
+  it('does not poll without a player or while disabled', () => {
+    expect(shouldPollPlayerPosition({ enabled: true, player: null })).toBe(false);
+    expect(
+      shouldPollPlayerPosition({
+        enabled: false,
+        player: snapshot({ playbackStatus: 'Playing' }),
+      }),
+    ).toBe(false);
   });
 });
 

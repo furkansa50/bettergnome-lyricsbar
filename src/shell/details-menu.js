@@ -1,11 +1,22 @@
+import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import St from 'gi://St';
 
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
+
+import {
+  computeBarFraction,
+  computeProgressFraction,
+  computeScrollValue,
+  computeSeekPositionMs,
+  formatTrackTime,
+} from '../domain/display/track-progress.js';
 import { _t } from '../runtime/i18n.js';
 
 /**
  * @import { LyricsProviderResult } from '../domain/lyrics/types.js'
+ *
+ * @typedef {Extract<LyricsProviderResult, { kind: 'synced' }>} SyncedLyrics
  *
  * @typedef {Readonly<{
  *   title: string | null,
@@ -16,8 +27,8 @@ import { _t } from '../runtime/i18n.js';
  *   positionMs: number | null,
  *   durationMs: number | null,
  *   trackId: string | null,
- *   lyrics: Extract<LyricsProviderResult, { kind: 'synced' }> | null,
- *   activeLine: string | null,
+ *   lyrics: SyncedLyrics | null,
+ *   activeLineIndex: number,
  * }>} DetailsMenuState
  *
  * @typedef {Readonly<{
@@ -27,9 +38,13 @@ import { _t } from '../runtime/i18n.js';
  *   onSeek: (positionMs: number) => void,
  * }>} DetailsMenuActions
  */
+
 const FALLBACK_ICON_NAME = 'audio-x-generic-symbolic';
 const ALBUM_ART_SIZE = 120;
 const LYRICS_SCROLL_HEIGHT = 200;
+
+/** Fallback row height used before the lyric labels have been allocated. */
+const ESTIMATED_LINE_HEIGHT = 20;
 
 /**
  * Build the details menu section for the LyricBar indicator popup.
@@ -41,29 +56,30 @@ const LYRICS_SCROLL_HEIGHT = 200;
  * All St actors created here are owned by the returned object;
  * call `destroy()` during extension disable.
  *
- * @param {any} _menu
+ * @param {any} menu Owning PopupMenu, used to re-sync layout on open.
  * @param {DetailsMenuActions} actions
  */
-export function buildDetailsMenu(_menu, actions) {
+export function buildDetailsMenu(menu, actions) {
   const section = new PopupMenu.PopupMenuSection();
 
   // --- Album Art + Title / Artist ---
   const headerBox = new St.BoxLayout({ style_class: 'lyricbar-details-header' });
-  headerBox.set_vertical(false);
+  setOrientation(headerBox, false);
 
+  const artIcon = new St.Icon({
+    icon_name: FALLBACK_ICON_NAME,
+    icon_size: ALBUM_ART_SIZE,
+    style_class: 'lyricbar-details-art-icon',
+  });
   const artBin = new St.Bin({
     style_class: 'lyricbar-details-art',
     width: ALBUM_ART_SIZE,
     height: ALBUM_ART_SIZE,
-    child: new St.Icon({
-      icon_name: FALLBACK_ICON_NAME,
-      icon_size: ALBUM_ART_SIZE,
-      style_class: 'lyricbar-details-art-icon',
-    }),
+    child: artIcon,
   });
 
   const infoBox = new St.BoxLayout({ style_class: 'lyricbar-details-info' });
-  infoBox.set_vertical(true);
+  setOrientation(infoBox, true);
 
   const titleLabel = new St.Label({
     style_class: 'lyricbar-details-title',
@@ -90,10 +106,21 @@ export function buildDetailsMenu(_menu, actions) {
     style_class: 'lyricbar-details-position',
     text: '0:00',
   });
-  const progressBar = new St.Widget({
+
+  // A BoxLayout, not a bare St.Widget: the fill child must be allocated the
+  // full bar height, and only a layout manager does that.
+  const progressBar = new St.BoxLayout({
     style_class: 'lyricbar-details-progress-bar',
     reactive: true,
+    x_expand: true,
   });
+  const progressFill = new St.Widget({
+    style_class: 'lyricbar-details-progress-fill',
+    y_expand: true,
+    width: 0,
+  });
+  progressBar.add_child(progressFill);
+
   const durationLabel = new St.Label({
     style_class: 'lyricbar-details-duration',
     text: '0:00',
@@ -126,10 +153,6 @@ export function buildDetailsMenu(_menu, actions) {
     accessible_name: _t('Next', 'Sonraki'),
   });
 
-  const prevClickedId = prevButton.connect('clicked', () => actions.onPrevious());
-  const playPauseClickedId = playPauseButton.connect('clicked', () => actions.onPlayPause());
-  const nextClickedId = nextButton.connect('clicked', () => actions.onNext());
-
   controlsBox.add_child(prevButton);
   controlsBox.add_child(playPauseButton);
   controlsBox.add_child(nextButton);
@@ -150,8 +173,8 @@ export function buildDetailsMenu(_menu, actions) {
   });
 
   const lyricsBox = new St.BoxLayout({ style_class: 'lyricbar-details-lyrics' });
-  lyricsBox.set_vertical(true);
-  scrollView.add_child(lyricsBox);
+  setOrientation(lyricsBox, true);
+  setScrollChild(scrollView, lyricsBox);
 
   const lyricsItem = new PopupMenu.PopupBaseMenuItem({ reactive: false, can_focus: false });
   lyricsItem.add_child(scrollView);
@@ -161,165 +184,310 @@ export function buildDetailsMenu(_menu, actions) {
   /** @type {string | null} */
   let currentArtUrl = null;
 
+  /**
+   * Last rendered lyrics object. Compared by identity: the controller reuses the
+   * same frozen lookup for every tick of a track, so identity is enough to know
+   * when the label list must be rebuilt.
+   *
+   * @type {SyncedLyrics | null}
+   */
+  let currentLyrics = null;
+
+  /** @type {any[]} */
+  let lineLabels = [];
+
+  /** Index currently carrying the active style class, or -1. */
+  let activeLabelIndex = -1;
+
+  /** Latest progress fraction, replayed whenever the bar is re-allocated. */
+  let progressFraction = 0;
+
+  /**
+   * Latest known duration, needed to turn a click position into a seek.
+   *
+   * @type {number | null}
+   */
+  let seekDurationMs = null;
+
+  const prevClickedId = prevButton.connect('clicked', () => actions.onPrevious());
+  const playPauseClickedId = playPauseButton.connect('clicked', () => actions.onPlayPause());
+  const nextClickedId = nextButton.connect('clicked', () => actions.onNext());
+
+  // St CSS has no percentage units, so the fill width is recomputed in pixels
+  // from the bar's allocation every time that allocation changes.
+  const progressWidthId = progressBar.connect('notify::width', () => {
+    applyProgressFill(progressBar, progressFill, progressFraction);
+  });
+
+  const progressPressId = progressBar.connect(
+    'button-press-event',
+    /**
+     * @param {any} actor
+     * @param {any} event
+     * @returns {unknown}
+     */
+    (actor, event) => {
+      const fraction = readPressFraction(actor, event);
+      if (fraction === null) {
+        return Clutter.EVENT_PROPAGATE;
+      }
+
+      const positionMs = computeSeekPositionMs(fraction, seekDurationMs);
+      if (positionMs === null) {
+        return Clutter.EVENT_PROPAGATE;
+      }
+
+      // Move the fill immediately: the player's next Position report is up to a
+      // full poll interval away and the bar would otherwise snap back.
+      progressFraction = fraction;
+      applyProgressFill(progressBar, progressFill, progressFraction);
+      actions.onSeek(positionMs);
+      return Clutter.EVENT_STOP;
+    },
+  );
+
+  // While the popup is closed its actors have no allocation, so the fill width
+  // and the scroll offset cannot be computed. Re-apply both on open.
+  const menuStateId =
+    typeof menu?.connect === 'function'
+      ? menu.connect(
+          'open-state-changed',
+          (/** @type {unknown} */ _menu, /** @type {boolean} */ open) => {
+            if (open !== true) {
+              return;
+            }
+            applyProgressFill(progressBar, progressFill, progressFraction);
+            scrollToLine(lyricsBox, scrollView, activeLabelIndex);
+          },
+        )
+      : 0;
+
+  // The first allocation after an open, and every lyrics rebuild, changes the
+  // box height. Re-centre then, otherwise the popup opens scrolled to the top
+  // of a song that is already half-way through.
+  const lyricsHeightId = lyricsBox.connect('notify::height', () => {
+    scrollToLine(lyricsBox, scrollView, activeLabelIndex);
+  });
+
   return {
     section,
 
     /**
      * Update the details menu contents.
      *
+     * Called on every position poll, so everything here is either an identity
+     * check or a single property write; the lyric labels are only rebuilt when
+     * the track's lyrics actually change.
+     *
      * @param {DetailsMenuState} state
      */
     update(state) {
-      // Title + Artist
       setLabelText(titleLabel, state.title ?? '');
       setLabelText(artistLabel, state.artist ?? '');
 
-      // Album art
-      updateArt(artBin, state.artUrl, currentArtUrl);
-      currentArtUrl = state.artUrl;
+      if (state.artUrl !== currentArtUrl) {
+        currentArtUrl = state.artUrl;
+        applyAlbumArt(artIcon, state.artUrl);
+      }
 
-      // Play/Pause icon
       const isPlaying = state.playbackStatus === 'Playing';
-      const ppIcon = playPauseButton.child;
-      if (ppIcon) {
+      const playPauseIcon = playPauseButton.child;
+      if (playPauseIcon) {
         setIconName(
-          ppIcon,
+          playPauseIcon,
           isPlaying ? 'media-playback-pause-symbolic' : 'media-playback-start-symbolic',
         );
       }
 
-      // Progress
-      setLabelText(positionLabel, formatTime(state.positionMs));
-      setLabelText(durationLabel, formatTime(state.durationMs));
-      const fraction = computeProgressFraction(state.positionMs, state.durationMs);
-      setProgressBarStyle(progressBar, fraction);
+      setLabelText(positionLabel, formatTrackTime(state.positionMs));
+      setLabelText(durationLabel, formatTrackTime(state.durationMs));
 
-      // Lyrics
-      updateLyrics(lyricsBox, scrollView, state.lyrics, state.activeLine);
+      seekDurationMs = state.durationMs;
+      progressFraction = computeProgressFraction(state.positionMs, state.durationMs);
+      applyProgressFill(progressBar, progressFill, progressFraction);
+
+      if (state.lyrics !== currentLyrics) {
+        currentLyrics = state.lyrics;
+        lineLabels = rebuildLyricLabels(lyricsBox, state.lyrics);
+        activeLabelIndex = -1;
+      }
+
+      const nextActive = normalizeActiveIndex(state.activeLineIndex, lineLabels.length);
+      if (nextActive !== activeLabelIndex) {
+        setActiveLine(lineLabels, activeLabelIndex, nextActive);
+        activeLabelIndex = nextActive;
+        scrollToLine(lyricsBox, scrollView, activeLabelIndex);
+      }
     },
 
     destroy() {
-      try {
-        if (prevButton && prevClickedId) {
-          prevButton.disconnect(prevClickedId);
-        }
-      } catch {
-        /* already gone */
-      }
-      try {
-        if (playPauseButton && playPauseClickedId) {
-          playPauseButton.disconnect(playPauseClickedId);
-        }
-      } catch {
-        /* already gone */
-      }
-      try {
-        if (nextButton && nextClickedId) {
-          nextButton.disconnect(nextClickedId);
-        }
-      } catch {
-        /* already gone */
-      }
+      disconnectSafely(prevButton, prevClickedId);
+      disconnectSafely(playPauseButton, playPauseClickedId);
+      disconnectSafely(nextButton, nextClickedId);
+      disconnectSafely(progressBar, progressWidthId);
+      disconnectSafely(progressBar, progressPressId);
+      disconnectSafely(lyricsBox, lyricsHeightId);
+      disconnectSafely(menu, menuStateId);
+
+      lineLabels = [];
+      activeLabelIndex = -1;
+      currentLyrics = null;
       currentArtUrl = null;
+      seekDurationMs = null;
+
+      // The section owns every actor built above, so destroying it tears down
+      // the whole subtree in one step.
+      try {
+        section.destroy();
+      } catch {
+        // already destroyed with the owning menu
+      }
     },
   };
 }
 
 /**
- * Update album art image.
+ * Point an existing St.Icon at the current album art.
  *
- * @param {any} artBin
+ * The icon actor is reused rather than replaced so a track change does not leave
+ * an orphaned actor behind on every poll.
+ *
+ * @param {any} icon
  * @param {string | null} artUrl
- * @param {string | null} previousArtUrl
+ * @returns {void}
  */
-function updateArt(artBin, artUrl, previousArtUrl) {
-  if (artUrl === previousArtUrl) {
-    return;
+function applyAlbumArt(icon, artUrl) {
+  const gicon = resolveArtGicon(artUrl);
+
+  try {
+    Reflect.set(icon, 'gicon', gicon);
+  } catch {
+    // gicon rejected by St; fall through to the themed fallback below
   }
 
-  let icon = null;
-
-  if (typeof artUrl === 'string' && artUrl !== '') {
-    try {
-      const gicon = Gio.Icon.new_for_string(artUrl);
-      if (gicon) {
-        icon = new St.Icon({
-          gicon,
-          icon_size: ALBUM_ART_SIZE,
-          style_class: 'lyricbar-details-art-icon',
-        });
-      }
-    } catch {
-      // Gio.Icon.new_for_string can throw for unsupported URI schemes
-    }
+  if (gicon === null) {
+    setIconName(icon, FALLBACK_ICON_NAME);
   }
-
-  if (icon === null) {
-    icon = new St.Icon({
-      icon_name: FALLBACK_ICON_NAME,
-      icon_size: ALBUM_ART_SIZE,
-      style_class: 'lyricbar-details-art-icon',
-    });
-  }
-
-  artBin.set_child(icon);
 }
 
 /**
- * Update the lyrics list.
+ * Build a GIcon for an `mpris:artUrl` value.
  *
- * @param {any} lyricsBox
- * @param {any} scrollView
- * @param {Extract<LyricsProviderResult, { kind: 'synced' }> | null} lyrics
- * @param {string | null} activeLine
+ * Players publish either a URI (`https://` for Spotify and browsers, `file://`
+ * for local libraries) or, less often, a bare absolute path. Anything else --
+ * including the `data:` URIs some browsers emit, which GIO cannot open -- is
+ * rejected so the caller can show the fallback icon instead of a blank box.
+ *
+ * @param {string | null} artUrl
+ * @returns {unknown}
  */
-function updateLyrics(lyricsBox, scrollView, lyrics, activeLine) {
-  // Clear existing labels
-  destroyChildren(lyricsBox);
-
-  /** @type {string[]} */
-  const lineTexts = [];
-
-  if (!lyrics || !lyrics.lines || lyrics.lines.length === 0) {
-    const noLyrics = new St.Label({
-      style_class: 'lyricbar-details-no-lyrics',
-      text: _t('No lyrics available', 'Söz bulunamadı'),
-    });
-    lyricsBox.add_child(noLyrics);
-    return;
+function resolveArtGicon(artUrl) {
+  if (typeof artUrl !== 'string') {
+    return null;
   }
 
-  for (const line of lyrics.lines) {
-    const isActive = activeLine !== null && line.text === activeLine;
+  const trimmed = artUrl.trim();
+  if (trimmed === '') {
+    return null;
+  }
+
+  const isUri = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed);
+  if (!isUri && !trimmed.startsWith('/')) {
+    return null;
+  }
+
+  try {
+    const file = isUri ? Gio.File.new_for_uri(trimmed) : Gio.File.new_for_path(trimmed);
+    return new Gio.FileIcon({ file });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Replace the lyric labels with one per line, returning them in order.
+ *
+ * @param {any} lyricsBox
+ * @param {SyncedLyrics | null} lyrics
+ * @returns {any[]}
+ */
+function rebuildLyricLabels(lyricsBox, lyrics) {
+  destroyChildren(lyricsBox);
+
+  const lines = lyrics?.lines ?? [];
+  if (lines.length === 0) {
+    lyricsBox.add_child(
+      new St.Label({
+        style_class: 'lyricbar-details-no-lyrics',
+        text: _t('No lyrics available', 'Söz bulunamadı'),
+      }),
+    );
+    return [];
+  }
+
+  /** @type {any[]} */
+  const labels = [];
+  for (const line of lines) {
     const label = new St.Label({
-      style_class: isActive
-        ? 'lyricbar-details-lyric-line lyricbar-details-lyric-active'
-        : 'lyricbar-details-lyric-line',
+      style_class: 'lyricbar-details-lyric-line',
       text: line.text,
     });
     lyricsBox.add_child(label);
-    lineTexts.push(/** @type {string} */ (line.text));
+    labels.push(label);
+  }
+  return labels;
+}
+
+/**
+ * Move the active style class from one lyric label to another.
+ *
+ * Highlighting by index rather than by text is what keeps a repeated chorus from
+ * lighting up every one of its occurrences at once.
+ *
+ * @param {readonly any[]} labels
+ * @param {number} previousIndex
+ * @param {number} nextIndex
+ * @returns {void}
+ */
+function setActiveLine(labels, previousIndex, nextIndex) {
+  const previousLabel = previousIndex >= 0 ? labels[previousIndex] : undefined;
+  if (previousLabel) {
+    removeStyleClass(previousLabel, 'lyricbar-details-lyric-active');
   }
 
-  // Auto-scroll to active line
-  if (activeLine !== null) {
-    const activeIndex = lineTexts.indexOf(activeLine);
-    if (activeIndex >= 0) {
-      scrollToActiveLine(lyricsBox, scrollView, activeIndex);
-    }
+  const nextLabel = nextIndex >= 0 ? labels[nextIndex] : undefined;
+  if (nextLabel) {
+    addStyleClass(nextLabel, 'lyricbar-details-lyric-active');
   }
 }
 
 /**
- * Scroll the lyrics box to bring the active line into view.
+ * @param {number} index
+ * @param {number} length
+ * @returns {number}
+ */
+function normalizeActiveIndex(index, length) {
+  if (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= length) {
+    return -1;
+  }
+  return index;
+}
+
+/**
+ * Scroll the lyrics view so the active line sits in the middle of the page.
  *
  * @param {any} lyricsBox
  * @param {any} scrollView
  * @param {number} activeIndex
+ * @returns {void}
  */
-function scrollToActiveLine(lyricsBox, scrollView, activeIndex) {
+function scrollToLine(lyricsBox, scrollView, activeIndex) {
+  if (activeIndex < 0) {
+    return;
+  }
+
   const children = lyricsBox.get_children?.();
-  if (!children || activeIndex >= children.length) {
+  if (!Array.isArray(children)) {
     return;
   }
 
@@ -329,85 +497,184 @@ function scrollToActiveLine(lyricsBox, scrollView, activeIndex) {
   }
 
   try {
-    const vAdjust = scrollView.get_vscroll_bar?.()?.get_adjustment?.();
-    if (vAdjust) {
-      const childY =
-        typeof activeChild.get_y === 'function' ? activeChild.get_y() : (activeChild.y ?? 0);
-      const childHeight =
-        typeof activeChild.get_height === 'function'
-          ? activeChild.get_height()
-          : (activeChild.height ?? 20);
-      const pageSize = vAdjust.page_size ?? LYRICS_SCROLL_HEIGHT;
-      const newValue = Math.max(0, childY - pageSize / 2 + childHeight / 2);
-      vAdjust.set_value(newValue);
+    const adjustment = readVerticalAdjustment(scrollView);
+    if (adjustment === null) {
+      return;
+    }
+
+    const value = computeScrollValue({
+      childY: readNumber(activeChild, 'get_y', 'y', 0),
+      childHeight: readNumber(activeChild, 'get_height', 'height', ESTIMATED_LINE_HEIGHT),
+      pageSize: readNumber(adjustment, 'get_page_size', 'page_size', 0),
+      upper: readNumber(adjustment, 'get_upper', 'upper', 0),
+    });
+
+    if (value !== null) {
+      adjustment.set_value(value);
     }
   } catch {
-    // scroll adjustment not available; non-critical
+    // scroll adjustment not available yet; non-critical
   }
 }
 
 /**
- * @param {number | null} ms
- * @returns {string}
+ * GNOME 46 dropped `St.ScrollView.get_vscroll_bar()`; the adjustment is exposed
+ * directly. Both spellings are probed so the extension keeps working on 45.
+ *
+ * @param {any} scrollView
+ * @returns {any}
  */
-function formatTime(ms) {
-  if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) {
-    return '0:00';
+function readVerticalAdjustment(scrollView) {
+  const direct = Reflect.get(scrollView, 'vadjustment');
+  if (direct !== null && direct !== undefined) {
+    return direct;
   }
-  const totalSec = Math.floor(ms / 1000);
-  const min = Math.floor(totalSec / 60);
-  const sec = totalSec % 60;
-  return `${min}:${sec.toString().padStart(2, '0')}`;
+
+  const legacy = scrollView.get_vscroll_bar?.()?.get_adjustment?.();
+  return legacy ?? null;
 }
 
 /**
- * @param {number | null} positionMs
- * @param {number | null} durationMs
+ * Fraction of the progress bar a pointer press landed on.
+ *
+ * @param {any} actor
+ * @param {any} event
+ * @returns {number | null}
+ */
+function readPressFraction(actor, event) {
+  const localX = readLocalPressX(actor, event);
+  if (localX === null) {
+    return null;
+  }
+
+  return computeBarFraction(localX, readNumber(actor, 'get_width', 'width', 0));
+}
+
+/**
+ * @param {any} actor
+ * @param {any} event
+ * @returns {number | null}
+ */
+function readLocalPressX(actor, event) {
+  const coords = typeof event?.get_coords === 'function' ? event.get_coords() : null;
+  if (!Array.isArray(coords) || coords.length < 2) {
+    return null;
+  }
+
+  const stageX = Number(coords[0]);
+  const stageY = Number(coords[1]);
+  if (!Number.isFinite(stageX) || !Number.isFinite(stageY)) {
+    return null;
+  }
+
+  if (typeof actor.transform_stage_point === 'function') {
+    // GJS returns the C out-parameters as [ok, x, y].
+    const transformed = actor.transform_stage_point(stageX, stageY);
+    if (Array.isArray(transformed) && transformed[0] === true && Number.isFinite(transformed[1])) {
+      return Number(transformed[1]);
+    }
+  }
+
+  if (typeof actor.get_transformed_position === 'function') {
+    const position = actor.get_transformed_position();
+    if (Array.isArray(position) && Number.isFinite(Number(position[0]))) {
+      return stageX - Number(position[0]);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Size the fill to `fraction` of the bar's allocated width.
+ *
+ * No-op while the bar is unallocated; `notify::width` replays it once the popup
+ * is laid out.
+ *
+ * @param {any} bar
+ * @param {any} fill
+ * @param {number} fraction
+ * @returns {void}
+ */
+function applyProgressFill(bar, fill, fraction) {
+  const barWidth = readNumber(bar, 'get_width', 'width', 0);
+  if (!Number.isFinite(barWidth) || barWidth <= 0) {
+    return;
+  }
+
+  const width = Math.round(Math.min(1, Math.max(0, fraction)) * barWidth);
+  try {
+    fill.set_width(width);
+  } catch {
+    Reflect.set(fill, 'width', width);
+  }
+}
+
+/**
+ * GNOME 48 deprecates `set_vertical()` in favour of the `orientation` property.
+ * Prefer the property and fall back for older shells.
+ *
+ * @param {any} box
+ * @param {boolean} vertical
+ * @returns {void}
+ */
+function setOrientation(box, vertical) {
+  const orientation = vertical ? Clutter.Orientation.VERTICAL : Clutter.Orientation.HORIZONTAL;
+  if (orientation !== undefined) {
+    try {
+      Reflect.set(box, 'orientation', orientation);
+      return;
+    } catch {
+      // property missing on this shell version; fall through
+    }
+  }
+
+  box.set_vertical?.(vertical);
+}
+
+/**
+ * GNOME 46 replaced `St.ScrollView.add_child()` with `set_child()`; calling the
+ * old name there adds the box as a sibling of the viewport and nothing renders.
+ *
+ * @param {any} scrollView
+ * @param {any} child
+ * @returns {void}
+ */
+function setScrollChild(scrollView, child) {
+  if (typeof scrollView.set_child === 'function') {
+    scrollView.set_child(child);
+    return;
+  }
+  scrollView.add_child?.(child);
+}
+
+/**
+ * Read a numeric actor property, preferring its getter.
+ *
+ * @param {any} target
+ * @param {string} getter
+ * @param {string} property
+ * @param {number} fallback
  * @returns {number}
  */
-function computeProgressFraction(positionMs, durationMs) {
-  if (
-    typeof positionMs !== 'number' ||
-    typeof durationMs !== 'number' ||
-    !Number.isFinite(positionMs) ||
-    !Number.isFinite(durationMs) ||
-    durationMs <= 0
-  ) {
-    return 0;
+function readNumber(target, getter, property, fallback) {
+  const fn = Reflect.get(target, getter);
+  if (typeof fn === 'function') {
+    const value = Number(fn.call(target));
+    if (Number.isFinite(value)) {
+      return value;
+    }
   }
-  return Math.min(1, Math.max(0, positionMs / durationMs));
-}
 
-/**
- * @param {any} bar
- * @param {number} fraction 0..1
- */
-function setProgressBarStyle(bar, fraction) {
-  bar.set_style(`background-color: rgba(255,255,255,0.3); width: 100%; height: 4px;`);
-  // The fill is rendered as a child. GNOME Shell CSS doesn't support
-  // pseudo-elements, so we overlay a child widget sized by fraction.
-  setProgressBarFill(bar, fraction);
-}
-
-/**
- * @param {any} bar
- * @param {number} fraction
- */
-function setProgressBarFill(bar, fraction) {
-  // Remove old fill child if present
-  destroyChildren(bar);
-
-  const fill = new St.Widget({
-    style_class: 'lyricbar-details-progress-fill',
-    style: `background-color: rgba(255,255,255,0.8); width: ${Math.round(fraction * 100)}%; height: 100%; border-radius: 2px;`,
-  });
-  bar.add_child(fill);
+  const value = Number(Reflect.get(target, property));
+  return Number.isFinite(value) ? value : fallback;
 }
 
 /**
  * Safely destroy all children of an actor.
  *
  * @param {any} actor
+ * @returns {void}
  */
 function destroyChildren(actor) {
   if (!actor) {
@@ -416,14 +683,12 @@ function destroyChildren(actor) {
   try {
     if (typeof actor.destroy_all_children === 'function') {
       actor.destroy_all_children();
-    } else if (typeof actor.get_children === 'function') {
-      const children = actor.get_children();
-      if (Array.isArray(children)) {
-        for (const child of children) {
-          if (child && typeof child.destroy === 'function') {
-            child.destroy();
-          }
-        }
+      return;
+    }
+    const children = actor.get_children?.();
+    if (Array.isArray(children)) {
+      for (const child of children) {
+        child?.destroy?.();
       }
     }
   } catch {
@@ -432,8 +697,51 @@ function destroyChildren(actor) {
 }
 
 /**
+ * @param {any} target
+ * @param {number} handlerId
+ * @returns {void}
+ */
+function disconnectSafely(target, handlerId) {
+  if (!target || !handlerId) {
+    return;
+  }
+  try {
+    target.disconnect(handlerId);
+  } catch {
+    // already gone
+  }
+}
+
+/**
+ * @param {any} actor
+ * @param {string} name
+ * @returns {void}
+ */
+function addStyleClass(actor, name) {
+  try {
+    actor.add_style_class_name(name);
+  } catch {
+    // actor destroyed
+  }
+}
+
+/**
+ * @param {any} actor
+ * @param {string} name
+ * @returns {void}
+ */
+function removeStyleClass(actor, name) {
+  try {
+    actor.remove_style_class_name(name);
+  } catch {
+    // actor destroyed
+  }
+}
+
+/**
  * @param {any} label
  * @param {string} text
+ * @returns {void}
  */
 function setLabelText(label, text) {
   try {
@@ -446,6 +754,7 @@ function setLabelText(label, text) {
 /**
  * @param {any} icon
  * @param {string} name
+ * @returns {void}
  */
 function setIconName(icon, name) {
   try {

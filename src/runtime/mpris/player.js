@@ -240,12 +240,10 @@ export class PlayerProxy {
       return;
     }
 
-    const trackIdVariant = new GLib.Variant('o', trackId);
+    // The tuple children are raw values, not Variants: wrapping trackId in its
+    // own GLib.Variant here would throw when the '(ox)' tuple is built.
     const positionUs = Math.round(positionMs * 1000);
-    this.#callPlayerMethodWithArgs(
-      'SetPosition',
-      new GLib.Variant('(ox)', [trackIdVariant, positionUs]),
-    );
+    this.#callPlayerMethodWithArgs('SetPosition', new GLib.Variant('(ox)', [trackId, positionUs]));
   }
 
   /**
@@ -280,7 +278,8 @@ export class PlayerProxy {
         PLAYER_IFACE,
         method,
         parameters,
-        parameters === null ? null : new GLib.VariantType('()'),
+        // Every MPRIS Player method used here replies with an empty tuple.
+        new GLib.VariantType('()'),
         Gio.DBusCallFlags.NONE,
         -1,
         this.#cancellable,

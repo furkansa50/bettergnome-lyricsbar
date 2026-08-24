@@ -65,9 +65,14 @@
   overflow: hidden;
 }
 
+/*
+ * St CSS has no percentage units, so the fill's width is set in pixels from the
+ * bar's allocation (see src/shell/details-menu.js). Its height comes from the
+ * parent's 4px box via y-expand, not from CSS.
+ */
 .lyricbar-details-progress-fill {
   border-radius: 2px;
-  height: 100%;
+  background-color: rgba(255, 255, 255, 0.85);
 }
 
 .lyricbar-details-position,
