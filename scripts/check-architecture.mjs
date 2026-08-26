@@ -18,6 +18,8 @@ const sourceFiles = (await listFiles('.')).filter(
 for (const path of sourceFiles) {
   const content = await readText(path);
 
+  checkNoRawControlCharacters(path, content);
+
   if (path.startsWith('src/domain/')) {
     checkForbidden(path, content, /gi:\/\//, 'domain modules must not import GJS GI modules');
     checkForbidden(
@@ -115,6 +117,63 @@ function checkForbidden(path, content, pattern, message) {
   }
 
   failures.push(`${path}: ${message}`);
+}
+
+/**
+ * Rejects raw control characters and invisible line separators in source text.
+ *
+ * These bytes are invisible in editors and pass ESLint, Prettier, `tsc`, and
+ * Node's parser, but GJS/SpiderMonkey stops reading a script at a literal NUL
+ * and fails extension load with a misleading
+ * `'' literal not terminated before end of script` SyntaxError. U+2028 and
+ * U+2029 are line terminators outside string literals, so they can silently
+ * split statements.
+ *
+ * Escape sequences such as `\u0000` are unaffected; only raw bytes are rejected.
+ *
+ * @param {string} path
+ * @param {string} content
+ * @returns {void}
+ */
+function checkNoRawControlCharacters(path, content) {
+  let line = 1;
+  let lineStart = 0;
+
+  for (let index = 0; index < content.length; index += 1) {
+    const codePoint = content.charCodeAt(index);
+
+    if (codePoint === 0x0a) {
+      line += 1;
+      lineStart = index + 1;
+      continue;
+    }
+
+    if (!isForbiddenCodePoint(codePoint)) {
+      continue;
+    }
+
+    const column = index - lineStart + 1;
+    const label = `U+${codePoint.toString(16).toUpperCase().padStart(4, '0')}`;
+    failures.push(
+      `${path}:${line}:${column}: raw control character ${label} is not allowed in source; use an escape sequence instead`,
+    );
+  }
+}
+
+/**
+ * Tab, line feed, and carriage return are the only control characters allowed in
+ * source text.
+ *
+ * @param {number} codePoint
+ * @returns {boolean}
+ */
+function isForbiddenCodePoint(codePoint) {
+  if (codePoint === 0x09 || codePoint === 0x0a || codePoint === 0x0d) {
+    return false;
+  }
+
+  // C0 controls, DEL, and the invisible Unicode line/paragraph separators.
+  return codePoint < 0x20 || codePoint === 0x7f || codePoint === 0x2028 || codePoint === 0x2029;
 }
 
 /**

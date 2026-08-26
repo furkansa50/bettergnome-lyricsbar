@@ -616,7 +616,7 @@ export class LyricBarController {
     const key =
       player === null
         ? null
-        : [player.busName, player.trackId, player.title, player.artist].join(' ');
+        : [player.busName, player.trackId, player.title, player.artist].join('|');
 
     if (key === this.#lastPositionTrackKey) {
       return;
