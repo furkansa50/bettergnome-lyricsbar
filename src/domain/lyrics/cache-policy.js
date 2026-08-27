@@ -19,7 +19,7 @@ import { shouldIgnoreAppleMusicDuration } from './duration-policy.js';
  * }>} CacheDecisionOptions
  */
 
-export const CACHE_SCHEMA_VERSION = 2;
+export const CACHE_SCHEMA_VERSION = 3;
 export const POSITIVE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const NEGATIVE_TTL_MS = 6 * 60 * 60 * 1000;
 

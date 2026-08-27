@@ -15,6 +15,7 @@
  *   beginMs: number,
  *   endMs: number,
  *   text: string,
+ *   trailingSpace?: boolean,
  * }>} WordTiming
  *
  * @typedef {Readonly<{
@@ -54,21 +55,64 @@ export function parseTtml(input) {
       continue;
     }
 
-    /** @type {WordTiming[]} */
-    const words = [];
+    /** @type {{ beginMs: number, endMs: number, text: string, match: RegExpExecArray }[]} */
+    const validSpans = [];
     for (const spanMatch of innerHtml.matchAll(SPAN_PATTERN)) {
       const wBegin = parseTimestamp(spanMatch[1]);
       const wEnd = parseTimestamp(spanMatch[2]);
       const wText = stripTags(spanMatch[3] ?? '');
       if (wBegin !== null && wEnd !== null && wText !== '') {
-        words.push(Object.freeze({ beginMs: wBegin, endMs: wEnd, text: wText }));
+        validSpans.push({
+          beginMs: wBegin,
+          endMs: wEnd,
+          text: wText,
+          match: spanMatch,
+        });
       }
     }
 
-    // Build the full line text from words (preserving spacing) or fall back
-    // to stripping tags from the inner HTML.
+    /** @type {WordTiming[]} */
+    const words = [];
+    for (let i = 0; i < validSpans.length; i++) {
+      const curr = validSpans[i];
+      if (!curr) {
+        continue;
+      }
+      const isLast = i === validSpans.length - 1;
+      let trailingSpace = false;
+
+      if (!isLast) {
+        const next = validSpans[i + 1];
+        if (next && typeof curr.match.index === 'number' && typeof next.match.index === 'number') {
+          const currEnd = curr.match.index + curr.match[0].length;
+          const nextStart = next.match.index;
+          const gap = innerHtml.slice(currEnd, nextStart);
+          const currRaw = curr.match[3] ?? '';
+          const nextRaw = next.match[3] ?? '';
+
+          trailingSpace = /\s/.test(gap) || /\s$/.test(currRaw) || /^\s/.test(nextRaw);
+        }
+      }
+
+      words.push(
+        Object.freeze({
+          beginMs: curr.beginMs,
+          endMs: curr.endMs,
+          text: curr.text,
+          trailingSpace,
+        }),
+      );
+    }
+
+    // Build the full line text preserving word boundaries and syllable structures,
+    // or fall back to stripping tags from the inner HTML.
     const text =
-      words.length > 0 ? words.map((w) => w.text).join(' ') : stripTags(innerHtml).trim();
+      words.length > 0
+        ? words
+            .map((w) => w.text + (w.trailingSpace ? ' ' : ''))
+            .join('')
+            .trim()
+        : stripTags(innerHtml).replace(/\s+/g, ' ').trim();
 
     if (text === '') {
       continue;

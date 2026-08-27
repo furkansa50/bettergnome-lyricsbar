@@ -174,6 +174,44 @@ describe('formatDisplayState', () => {
       visible: true,
     });
   });
+
+  it('formats syllable-timed words respecting trailingSpace without extra spacing', () => {
+    const words = [
+      { beginMs: 1000, endMs: 1500, text: 'Be', trailingSpace: false },
+      { beginMs: 1500, endMs: 2000, text: 'cause', trailingSpace: true },
+      { beginMs: 2000, endMs: 2500, text: 'love', trailingSpace: false },
+    ];
+
+    expect(
+      formatDisplayState(
+        {
+          kind: 'lyrics',
+          line: 'Because love',
+          words,
+          activeWordIndex: 0,
+        },
+        'track',
+      ),
+    ).toEqual({
+      text: '<span foreground="#ffffff" weight="bold">Be</span><span foreground="#ffffff59">cause</span> <span foreground="#ffffff59">love</span>',
+      visible: true,
+    });
+
+    expect(
+      formatDisplayState(
+        {
+          kind: 'lyrics',
+          line: 'Because love',
+          words,
+          activeWordIndex: 1,
+        },
+        'track',
+      ),
+    ).toEqual({
+      text: '<span foreground="#ffffff">Be</span><span foreground="#ffffff" weight="bold">cause</span> <span foreground="#ffffff59">love</span>',
+      visible: true,
+    });
+  });
 });
 
 describe('formatTrackText', () => {

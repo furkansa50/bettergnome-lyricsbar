@@ -59,19 +59,21 @@ export function formatDisplayState(
            */
           (w, idx) => {
             const escapedWord = escapeMarkup(w.text);
+            const isLast = idx === state.words.length - 1;
+            const space = (w.trailingSpace ?? !isLast) ? ' ' : '';
             if (idx === state.activeWordIndex) {
               // Active word: bold, full opacity
-              return `<span foreground="${baseColor}" weight="bold">${escapedWord}</span>`;
+              return `<span foreground="${baseColor}" weight="bold">${escapedWord}</span>${space}`;
             }
             if (idx < state.activeWordIndex) {
               // Past words: normal weight, full opacity
-              return `<span foreground="${baseColor}">${escapedWord}</span>`;
+              return `<span foreground="${baseColor}">${escapedWord}</span>${space}`;
             }
             // Future words: translucent/dimmed
-            return `<span foreground="${dimmedColor}">${escapedWord}</span>`;
+            return `<span foreground="${dimmedColor}">${escapedWord}</span>${space}`;
           },
         );
-        return { text: wordMarkup.join(' '), visible: true };
+        return { text: wordMarkup.join(''), visible: true };
       }
 
       return visibleText(escapeMarkup(line));

@@ -199,8 +199,8 @@ export default class LyricBarPreferences extends ExtensionPreferences {
     const showSettingsIconRow = new Adw.SwitchRow({
       title: _t('Show settings icon', 'Ayarlar simgesini göster'),
       subtitle: _t(
-        'Show a separate top-bar shortcut to Better Lyrics preferences.',
-        'Better Lyrics ayarlarına giden ayrı bir üst bar kısayolu göster.',
+        'Show a separate top-bar shortcut to Better Lyrics Bar settings.',
+        'Better Lyrics Bar ayarlarına giden ayrı bir üst bar kısayolu göster.',
       ),
     });
     settings.bind(

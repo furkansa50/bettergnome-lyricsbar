@@ -181,7 +181,7 @@ class LyricBarSettingsIndicatorBase extends PanelMenu.Button {
    * @param {any} extension
    */
   _init(settings, extension) {
-    super._init(0.0, 'Better Lyrics Settings', false);
+    super._init(0.0, 'Better Lyrics Bar Settings', false);
 
     this.add_style_class_name('lyricbar-settings-button');
 
@@ -268,7 +268,7 @@ class LyricBarSettingsIndicatorBase extends PanelMenu.Button {
 
     // Full Preferences link
     this._prefsItem = new PopupMenu.PopupMenuItem(
-      _t('Better Lyrics Preferences', 'Better Lyrics Ayarları'),
+      _t('Better Lyrics Bar Settings', 'Better Lyrics Bar Ayarları'),
     );
     this._prefsActivatedId = this._prefsItem.connect('activate', () => {
       extension.openPreferences();

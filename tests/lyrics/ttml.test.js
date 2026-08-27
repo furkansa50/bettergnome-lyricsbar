@@ -32,10 +32,10 @@ describe('parseTtml', () => {
       endMs: 28960,
       text: 'I been tryna call',
       words: [
-        { beginMs: 27395, endMs: 27549, text: 'I' },
-        { beginMs: 27549, endMs: 27740, text: 'been' },
-        { beginMs: 27740, endMs: 28077, text: 'tryna' },
-        { beginMs: 28077, endMs: 28960, text: 'call' },
+        { beginMs: 27395, endMs: 27549, text: 'I', trailingSpace: true },
+        { beginMs: 27549, endMs: 27740, text: 'been', trailingSpace: true },
+        { beginMs: 27740, endMs: 28077, text: 'tryna', trailingSpace: true },
+        { beginMs: 28077, endMs: 28960, text: 'call', trailingSpace: false },
       ],
     });
 
@@ -84,5 +84,30 @@ describe('parseTtml', () => {
     const result = parseTtml('<p begin="1.000" end="2.000">&#0; &#1114112;</p>');
 
     expect(result[0]?.text).toBe('&#0; &#1114112;');
+  });
+
+  it('preserves syllable-level words without inserting extra spaces', () => {
+    const ttml = `
+      <p begin="64.132" end="70.990">
+        <span begin="64.132" end="64.582">Be</span><span begin="64.582" end="65.032">cause</span> <span begin="65.032" end="65.759">love</span> <span begin="66.960" end="67.259">can</span> <span begin="67.259" end="68.748">burn</span> <span begin="68.748" end="69.131">like</span> <span begin="69.131" end="69.549">a</span> <span begin="69.549" end="70.179">ci</span><span begin="70.179" end="70.486">ga</span><span begin="70.486" end="70.990">rette</span>
+      </p>
+    `;
+
+    const result = parseTtml(ttml);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.text).toBe('Because love can burn like a cigarette');
+    expect(result[0]?.words.map((w) => [w.text, w.trailingSpace])).toEqual([
+      ['Be', false],
+      ['cause', true],
+      ['love', true],
+      ['can', true],
+      ['burn', true],
+      ['like', true],
+      ['a', true],
+      ['ci', false],
+      ['ga', false],
+      ['rette', false],
+    ]);
   });
 });

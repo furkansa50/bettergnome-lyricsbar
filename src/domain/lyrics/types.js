@@ -8,6 +8,7 @@
  *   beginMs: number,
  *   endMs: number,
  *   text: string,
+ *   trailingSpace?: boolean,
  * }>} WordTiming
  *
  * @typedef {Readonly<{
