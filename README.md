@@ -1,30 +1,28 @@
-# LyricBar
+# Better Lyrics Bar
 
-LyricBar is a GNOME Shell extension that displays synchronized live lyrics in the top bar for MPRIS-compatible music players.
+Better Lyrics Bar is a GNOME Shell extension that displays synchronized live lyrics in the top bar for MPRIS-compatible music players.
 
-It is built for GNOME Shell 46-50 and supports Spotify Desktop, Spotify Web, YouTube Music Web, Apple Music Web, and other MPRIS players. Lyrics are fetched from LRCLIB, cached locally, and rendered as a single glanceable line in the panel.
+It is built for GNOME Shell 46–50 and supports Spotify Desktop, Spotify Web, YouTube Music Web, Apple Music Web, and other MPRIS players. Features include word-by-word synced lyrics, a multi-provider fallback engine (Musixmatch, Better Lyrics, LRCLIB), dynamic auto-width, and an interactive song details popup.
 
-![LyricBar screenshot](docs/assets/lyricbar-panel.png)
+![Better Lyrics Bar screenshot](docs/assets/lyricbar-panel.png)
 
-![LyricBar demo](docs/assets/lyricbar-demo.gif)
+![Better Lyrics Bar demo](docs/assets/lyricbar-demo.gif)
 
 ## Features
 
-- Synced one-line lyric display in the GNOME top bar.
-- MPRIS player selection with configurable player priority.
-- Browser player profiles for Spotify Web, YouTube Music Web, and Apple Music Web.
-- Apple Music Web position normalization for browsers that expose cumulative media-session position.
-- LRCLIB synced lyric lookup with local cache.
-- Fallback modes for tracks without synced lyrics.
-- Preferences for panel position, maximum width, text alignment, fallback behavior, browser player service, cache, player priority, and debug logging.
-- Small panel menu for quick position/alignment changes and preferences access.
-- Strict local harness: formatting, linting, type checking, architecture checks, unit tests, schema validation, and bundle build.
+- **Word-by-Word Synced Lyrics**: Real-time word highlighting and line tracking with smooth CSS transitions and glow effects.
+- **Multi-Provider Pipeline**: Intelligent lyric lookup cascading across Musixmatch (RichSync and LRC), Better Lyrics API, and LRCLIB with local caching.
+- **Dynamic Auto-Width**: Top-bar label automatically adjusts width to fit lyric text up to a configurable maximum width.
+- **Interactive Details Popup**: Click the top bar indicator to view track artwork, artist/album metadata, playback controls (Play/Pause, Next, Previous), a seek slider, volume control, and active lyrics source switcher.
+- **Broad MPRIS Player Support**: Seamless integration with Spotify Desktop, Spotify Web, YouTube Music Web, Apple Music Web, and generic MPRIS media players.
+- **Deep Customization**: Preferences for text color (system, presets, or custom HEX), text shadow and glow intensity, panel position (left, center, right), text alignment, fallback mode, and cache toggles.
+- **Robust Shell Architecture**: Isolated domain logic, guarded async callbacks, and strict lifecycle cleanup on disable.
 
 ## Compatibility
 
 | Target               | Status        |
 | -------------------- | ------------- |
-| GNOME Shell 46-50    | Supported     |
+| GNOME Shell 46–50    | Supported     |
 | Ubuntu 24.04         | Supported     |
 | Fedora GNOME         | Supported     |
 | Spotify Desktop      | Supported     |
@@ -35,30 +33,26 @@ It is built for GNOME Shell 46-50 and supports Spotify Desktop, Spotify Web, You
 | Non-GNOME desktops   | Not supported |
 | Browser/website APIs | Not used      |
 
-Broader GNOME Shell versions should be added only after runtime testing. GNOME Shell extension APIs are not stable enough for blanket compatibility claims.
-
-Browser support is powered by the browser's MPRIS integration. LyricBar does not scrape tabs, inspect page DOM, read browser history, or use private Spotify, YouTube, or Apple APIs. If a browser player is ambiguous, use Preferences -> Browser player service to select the intended service.
+Browser player support is powered by the browser's native MPRIS integration. Better Lyrics Bar does not scrape tabs, read DOM content, or access private player credentials.
 
 ## Install
 
 Recommended install (includes automatic daily updates):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fikrilal/gnome-lyricbar/main/scripts/install.sh | bash -s -- --install-updater
+curl -fsSL https://raw.githubusercontent.com/furkansa50/bettergnome-lyrics/main/scripts/install.sh | bash -s -- --install-updater
 ```
-
-LyricBar is in active development with frequent bug fixes and new features. Auto-update ensures you always have the latest version.
 
 Install without auto-update:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/fikrilal/gnome-lyricbar/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/furkansa50/bettergnome-lyrics/main/scripts/install.sh | bash
 ```
 
 Open preferences:
 
 ```bash
-gnome-extensions prefs lyricbar@fikrilal.github.io
+gnome-extensions prefs betterlyricsbar@furkansa50
 ```
 
 Manual update command:
@@ -70,34 +64,40 @@ Manual update command:
 Uninstall:
 
 ```bash
-gnome-extensions disable lyricbar@fikrilal.github.io
-rm -rf ~/.local/share/gnome-shell/extensions/lyricbar@fikrilal.github.io
-curl -fsSL https://raw.githubusercontent.com/fikrilal/gnome-lyricbar/main/scripts/install.sh | bash -s -- --uninstall-updater
+gnome-extensions disable betterlyricsbar@furkansa50
+rm -rf ~/.local/share/gnome-shell/extensions/betterlyricsbar@furkansa50
+curl -fsSL https://raw.githubusercontent.com/furkansa50/bettergnome-lyrics/main/scripts/install.sh | bash -s -- --uninstall-updater
 ```
 
 ## Development
 
 Requirements:
 
-- GNOME Shell 46-50
+- GNOME Shell 46–50
 - Node.js 22+
 - `glib-compile-schemas`
 - `zip`
 
-Build and install:
+Build and install locally:
 
 ```bash
 npm ci
 npm run verify
-gnome-extensions install --force dist/lyricbar@fikrilal.github.io.zip
-gnome-extensions enable lyricbar@fikrilal.github.io
+gnome-extensions install --force dist/betterlyricsbar@furkansa50.zip
+gnome-extensions enable betterlyricsbar@furkansa50
 ```
 
-The generated bundle is written to `dist/lyricbar@fikrilal.github.io.zip`.
+Or install unpacked for local development:
+
+```bash
+npm run install:local
+```
+
+The generated release bundle is written to `dist/betterlyricsbar@furkansa50.zip`.
 
 ## Privacy
 
-LyricBar does not use telemetry and does not require a Spotify account. For lyric lookup, it sends track metadata such as artist, title, album, and duration to LRCLIB. See [Privacy](docs/privacy.md).
+Better Lyrics Bar does not use telemetry and does not require account credentials. For lyric lookups, track metadata (artist, title, album, duration) is queried against public lyrics services. See [Privacy](docs/privacy.md).
 
 ## Troubleshooting
 
@@ -112,6 +112,10 @@ If the panel is blank, lyrics do not sync, or the wrong player is selected, see 
 - [Agent harness](docs/harness/agent-harness.md)
 - [Runtime evidence workflow](docs/harness/runtime-evidence.md)
 - [Release checklist](docs/operations/release-checklist.md)
+
+## Acknowledgements
+
+Better Lyrics Bar is a fork of [fikrilal/gnome-lyricbar](https://github.com/fikrilal/gnome-lyricbar) with word-by-word sync, Musixmatch integration, auto-width indicator, details popup menu, and extensive enhancements.
 
 ## License
 

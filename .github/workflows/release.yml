@@ -56,7 +56,7 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          name: LyricBar ${{ github.ref_name }}
-          files: dist/lyricbar@fikrilal.github.io.zip
+          name: Better Lyrics Bar ${{ github.ref_name }}
+          files: dist/betterlyricsbar@furkansa50.zip
           fail_on_unmatched_files: true
           body_path: docs/release-notes/${{ github.ref_name }}.md

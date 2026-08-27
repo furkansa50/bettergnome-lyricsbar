@@ -25,7 +25,7 @@ import { _t } from './src/runtime/i18n.js';
  */
 
 const UPDATE_CHECK_INTERVAL_S = 86400;
-const GITHUB_RELEASES_URL = 'https://github.com/fikrilal/gnome-lyricbar/releases/latest';
+const GITHUB_RELEASES_URL = 'https://github.com/furkansa50/bettergnome-lyrics/releases/latest';
 const STATE_DIR = GLib.build_filenamev([GLib.get_user_state_dir(), 'lyricbar']);
 const UPDATE_STATE_FILE = GLib.build_filenamev([STATE_DIR, 'update-check.json']);
 const UPDATER_PATH = GLib.build_filenamev([
@@ -560,7 +560,7 @@ export default class LyricBarPreferences extends ExtensionPreferences {
     const openIssueId = openIssueButton.connect('clicked', () => {
       Gtk.show_uri(
         window,
-        `${readMetadataText(metadata, 'url', 'https://github.com/fikrilal/gnome-lyricbar')}/issues/new`,
+        `${readMetadataText(metadata, 'url', 'https://github.com/furkansa50/bettergnome-lyrics')}/issues/new`,
         0,
       );
     });
@@ -586,7 +586,7 @@ export default class LyricBarPreferences extends ExtensionPreferences {
     });
     updateRow.visible = true;
 
-    const releasesUrl = `${readMetadataText(metadata, 'url', 'https://github.com/fikrilal/gnome-lyricbar')}/releases`;
+    const releasesUrl = `${readMetadataText(metadata, 'url', 'https://github.com/furkansa50/bettergnome-lyrics')}/releases`;
     updateRow.activatable = true;
     const updateActivateId = updateRow.connect('activated', () => {
       Gtk.show_uri(window, releasesUrl, 0);
@@ -676,7 +676,7 @@ export default class LyricBarPreferences extends ExtensionPreferences {
       subtitle: readMetadataText(
         metadata,
         'url',
-        'https://github.com/furkansa50/bettergnome-lyricbar',
+        'https://github.com/furkansa50/bettergnome-lyrics',
       ),
     });
     websiteRow.activatable = true;
@@ -889,7 +889,7 @@ function buildDiagnosticsMarkdown(metadata, settings) {
     '| --- | --- |',
     `| Version | ${escapeMarkdownTable(readMetadataText(metadata, 'version-name', 'Unknown'))} |`,
     `| UUID | ${escapeMarkdownTable(readMetadataText(metadata, 'uuid', 'betterlyricsbar@furkansa50'))} |`,
-    `| URL | ${escapeMarkdownTable(readMetadataText(metadata, 'url', 'https://github.com/furkansa50/bettergnome-lyricbar'))} |`,
+    `| URL | ${escapeMarkdownTable(readMetadataText(metadata, 'url', 'https://github.com/furkansa50/bettergnome-lyrics'))} |`,
     `| Shell compatibility | ${escapeMarkdownTable(readShellVersions(metadata))} |`,
     `| Panel position | ${escapeMarkdownTable(settings.get_string('panel-position'))} |`,
     `| Text alignment | ${escapeMarkdownTable(settings.get_string('text-align'))} |`,
