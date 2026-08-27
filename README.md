@@ -70,7 +70,7 @@ Browser player support is powered by the browser's native MPRIS integration. Bet
 
 ## Install
 
-### GNOME Extensions Store 
+### GNOME Extensions Store (WIP)
 
 Install directly from the official store or Extension Manager:
 
