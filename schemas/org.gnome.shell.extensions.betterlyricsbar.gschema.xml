@@ -83,15 +83,5 @@
       <summary>Glow strength</summary>
       <description>Intensity/strength of the text shadow glow effect.</description>
     </key>
-    <key name="blur-effect" type="s">
-      <choices>
-        <choice value="auto"/>
-        <choice value="always"/>
-        <choice value="disabled"/>
-      </choices>
-      <default>'auto'</default>
-      <summary>Blur effect mode</summary>
-      <description>Blur effect mode for the details popup menu ('auto', 'always', or 'disabled'). In auto mode, blur is automatically enabled when Blur my Shell is active.</description>
-    </key>
   </schema>
 </schemalist>

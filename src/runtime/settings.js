@@ -33,7 +33,6 @@ const SETTING_KEYS = [
   'style-text-color-custom',
   'style-text-shadow',
   'style-glow-strength',
-  'blur-effect',
 ];
 
 export class SettingsAdapter {
@@ -70,7 +69,6 @@ export class SettingsAdapter {
       customTextColor: this.#settings.get_string('style-text-color-custom'),
       textShadowEnabled: this.#settings.get_boolean('style-text-shadow'),
       glowStrength: this.#settings.get_double('style-glow-strength'),
-      blurEffect: this.#settings.get_string('blur-effect'),
     });
   }
 

@@ -20,7 +20,6 @@ const DEFAULT_HIDE_WHEN_IDLE = true;
 const DEFAULT_GLOW_STRENGTH = 1.0;
 const MIN_GLOW_STRENGTH = 0.0;
 const MAX_GLOW_STRENGTH = 2.0;
-const DEFAULT_BLUR_EFFECT = 'auto';
 
 const PANEL_POSITIONS = new Set(['left', 'center', 'right']);
 const FALLBACK_MODES = new Set(['track', 'idle', 'hidden']);
@@ -33,11 +32,9 @@ const BROWSER_PLAYER_SERVICES = new Set([
 ]);
 const LYRICS_SOURCES = new Set(['musixmatch', 'better-lyrics', 'lrclib']);
 const TEXT_ALIGNS = new Set(['left', 'center', 'right']);
-const BLUR_EFFECT_MODES = new Set(['auto', 'always', 'disabled']);
 
 /**
  * @import {
- *   BlurEffectMode,
  *   BrowserPlayerService,
  *   FallbackMode,
  *   LyricBarSettings,
@@ -71,18 +68,7 @@ export function normalizeSettings(raw) {
     textShadowEnabled: normalizeBoolean(raw.textShadowEnabled, DEFAULT_TEXT_SHADOW_ENABLED),
     glowStrength: normalizeGlowStrength(raw.glowStrength),
     autoWidth: normalizeBoolean(raw.autoWidth, DEFAULT_AUTO_WIDTH),
-    blurEffect: normalizeBlurEffect(raw.blurEffect),
   };
-}
-
-/**
- * @param {unknown} value
- * @returns {BlurEffectMode}
- */
-export function normalizeBlurEffect(value) {
-  return typeof value === 'string' && BLUR_EFFECT_MODES.has(value)
-    ? /** @type {BlurEffectMode} */ (value)
-    : DEFAULT_BLUR_EFFECT;
 }
 
 /**

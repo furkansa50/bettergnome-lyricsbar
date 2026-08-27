@@ -12,7 +12,6 @@ import {
   normalizeCustomTextColor,
   normalizeGlowStrength,
   normalizeLyricsSource,
-  normalizeBlurEffect,
 } from '../../src/domain/settings/normalize.js';
 
 describe('normalizeSettings', () => {
@@ -35,7 +34,6 @@ describe('normalizeSettings', () => {
         textShadowEnabled: false,
         glowStrength: 1.5,
         autoWidth: false,
-        blurEffect: 'always',
       }),
     ).toEqual({
       panelPosition: 'left',
@@ -54,7 +52,6 @@ describe('normalizeSettings', () => {
       textShadowEnabled: false,
       glowStrength: 1.5,
       autoWidth: false,
-      blurEffect: 'always',
     });
   });
 
@@ -75,7 +72,6 @@ describe('normalizeSettings', () => {
         customTextColor: 'rgb(255,0,0)',
         textShadowEnabled: 'yes',
         glowStrength: 'strong',
-        blurEffect: 'invalid',
       }),
     ).toEqual({
       panelPosition: 'center',
@@ -94,7 +90,6 @@ describe('normalizeSettings', () => {
       textShadowEnabled: true,
       glowStrength: 1.0,
       autoWidth: true,
-      blurEffect: 'auto',
     });
   });
 });
@@ -223,19 +218,5 @@ describe('normalizeLyricsSource', () => {
     expect(normalizeLyricsSource('auto')).toBe('musixmatch');
     expect(normalizeLyricsSource('unknown')).toBe('musixmatch');
     expect(normalizeLyricsSource(null)).toBe('musixmatch');
-  });
-});
-
-describe('normalizeBlurEffect', () => {
-  it('accepts known blur effect modes', () => {
-    expect(normalizeBlurEffect('auto')).toBe('auto');
-    expect(normalizeBlurEffect('always')).toBe('always');
-    expect(normalizeBlurEffect('disabled')).toBe('disabled');
-  });
-
-  it('rejects unknown blur effect modes and falls back to auto', () => {
-    expect(normalizeBlurEffect('invalid')).toBe('auto');
-    expect(normalizeBlurEffect(null)).toBe('auto');
-    expect(normalizeBlurEffect(undefined)).toBe('auto');
   });
 });

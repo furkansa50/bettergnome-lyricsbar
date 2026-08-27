@@ -34,7 +34,7 @@
   border-radius: 18px;
   padding: 14px 16px;
   margin: 4px 6px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  box-shadow: none;
 }
 
 .lyricbar-details-header {
@@ -287,44 +287,4 @@
   color: rgba(255, 255, 255, 0.4);
   padding: 24px 8px;
   text-align: center;
-}
-
-/* ── Blur my Shell integration ───────────────────────────── */
-
-.lyricbar-blurred-menu {
-  background-color: rgba(24, 24, 28, 0.65) !important;
-  border: 1px solid rgba(255, 255, 255, 0.14) !important;
-  border-radius: 20px !important;
-  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.5) !important;
-}
-
-.lyricbar-blurred-menu .lyricbar-details-card {
-  background-color: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: none;
-}
-
-.lyricbar-blurred-menu .lyricbar-details-lyrics-scroll {
-  background-color: rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.lyricbar-blurred-menu .lyricbar-details-source-pills {
-  background-color: rgba(0, 0, 0, 0.28);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.lyricbar-blurred-menu .popup-menu-item:hover,
-.lyricbar-blurred-menu .popup-menu-item:focus {
-  background-color: rgba(255, 255, 255, 0.1) !important;
-}
-
-.lyricbar-blurred-menu .popup-sub-menu {
-  background-color: rgba(0, 0, 0, 0.25) !important;
-  border-radius: 12px;
-}
-
-#panel.transparent-panel .lyricbar-label,
-#panel.panel-light-text .lyricbar-label {
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
 }
