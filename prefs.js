@@ -96,34 +96,6 @@ export default class LyricBarPreferences extends ExtensionPreferences {
     });
     connections.push([settings, posChangedId]);
 
-    // max-width: SpinRow
-    const maxWidthRow = new Adw.SpinRow({
-      title: _t('Maximum width', 'Maksimum genişlik'),
-      subtitle: _t(
-        'Maximum top-bar label width in pixels.',
-        'Piksel cinsinden maksimum üst bar etiket genişliği.',
-      ),
-      adjustment: new Gtk.Adjustment({
-        lower: 120,
-        upper: 720,
-        step_increment: 10,
-        page_increment: 50,
-        value: settings.get_int('max-width'),
-      }),
-    });
-    settings.bind('max-width', maxWidthRow, 'value', Gio.SettingsBindFlags.DEFAULT);
-
-    // auto-width: SwitchRow
-    const autoWidthRow = new Adw.SwitchRow({
-      title: _t('Auto width', 'Otomatik genişlik'),
-      subtitle: _t(
-        'Automatically adjust label width to fit lyrics text (up to maximum width).',
-        'Etiket genişliğini şarkı sözü metnine göre otomatik ayarla (maksimum genişliğe kadar).',
-      ),
-      active: settings.get_boolean('auto-width'),
-    });
-    settings.bind('auto-width', autoWidthRow, 'active', Gio.SettingsBindFlags.DEFAULT);
-
     // text-align: ComboRow
     const alignments = ['left', 'center', 'right'];
     const textAlignRow = new Adw.ComboRow({
@@ -220,8 +192,6 @@ export default class LyricBarPreferences extends ExtensionPreferences {
     settings.bind('hide-when-idle', hideWhenIdleRow, 'active', Gio.SettingsBindFlags.DEFAULT);
 
     displayGroup.add(panelPositionRow);
-    displayGroup.add(maxWidthRow);
-    displayGroup.add(autoWidthRow);
     displayGroup.add(textAlignRow);
     displayGroup.add(fallbackModeRow);
     displayGroup.add(hideWhenIdleRow);

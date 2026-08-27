@@ -75,7 +75,7 @@ describe('normalizeSettings', () => {
       }),
     ).toEqual({
       panelPosition: 'center',
-      maxWidth: 360,
+      maxWidth: 720,
       textAlign: 'left',
       fallbackMode: 'track',
       showSettingsIcon: true,

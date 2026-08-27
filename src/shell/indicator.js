@@ -94,7 +94,7 @@ class LyricBarIndicatorBase extends PanelMenu.Button {
     // In auto-width mode, actor width is unpinned (-1) to size naturally up to maxWidth.
     // In fixed mode, width is pinned to maxWidth.
     const width = viewModel.autoWidth ? -1 : viewModel.maxWidth;
-    const ellipsize = 3;
+    const ellipsize = viewModel.autoWidth ? 0 : 3;
     let geometryChanged = false;
 
     if (applied.autoWidth !== viewModel.autoWidth) {

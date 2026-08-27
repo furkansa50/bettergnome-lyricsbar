@@ -7,7 +7,7 @@
       <description>Where the LyricBar indicator should be placed in the GNOME top bar.</description>
     </key>
     <key name="max-width" type="i">
-      <default>360</default>
+      <default>720</default>
       <range min="120" max="720"/>
       <summary>Maximum label width</summary>
       <description>Maximum width in pixels for the top-bar lyric label.</description>

@@ -7,7 +7,7 @@ import {
 } from './appearance.js';
 
 const DEFAULT_PANEL_POSITION = 'center';
-const DEFAULT_MAX_WIDTH = 360;
+const DEFAULT_MAX_WIDTH = 720;
 const MIN_MAX_WIDTH = 120;
 const MAX_MAX_WIDTH = 720;
 const DEFAULT_FALLBACK_MODE = 'track';
