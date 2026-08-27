@@ -7,8 +7,8 @@ coverage/
 *.log
 .claude/settings.local.json
 .engineering
-.completed
-.harness
-.operations
-.players
-.release-notes
+.assets/completed
+.assets/harness
+.assets/operations
+.assets/players
+.assets/release-notes
