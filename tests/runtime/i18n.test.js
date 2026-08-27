@@ -19,6 +19,7 @@ describe('_t localization helper', () => {
       expect(_t('Better Lyrics Bar Settings', 'Better Lyrics Bar Ayarları')).toBe(
         'Better Lyrics Bar Ayarları',
       );
+      expect(_t('No lyrics found', 'Şarkı sözü bulunamadı')).toBe('Şarkı sözü bulunamadı');
     } finally {
       Intl.DateTimeFormat = origDateTimeFormat;
     }
@@ -42,6 +43,7 @@ describe('_t localization helper', () => {
       expect(_t('Better Lyrics Bar Settings', 'Better Lyrics Bar Ayarları')).toBe(
         'Better Lyrics Bar Settings',
       );
+      expect(_t('No lyrics found', 'Şarkı sözü bulunamadı')).toBe('No lyrics found');
     } finally {
       Intl.DateTimeFormat = origDateTimeFormat;
       if (origLC !== undefined) {

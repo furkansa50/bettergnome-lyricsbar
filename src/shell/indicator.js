@@ -1,8 +1,10 @@
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GObject from 'gi://GObject';
+import Shell from 'gi://Shell';
 import St from 'gi://St';
 
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
@@ -10,19 +12,123 @@ import { buildLabelStyleString } from '../domain/display/style.js';
 import { buildDetailsMenu } from './details-menu.js';
 import { _t } from '../runtime/i18n.js';
 
+const BLUR_MY_SHELL_UUID = 'blur-my-shell@aunetx';
+const BLUR_EFFECT_NAME = 'lyricbar-menu-blur';
+
+/**
+ * Checks whether Blur my Shell is installed and currently active.
+ *
+ * @returns {boolean}
+ */
+export function isBlurMyShellActive() {
+  try {
+    // @ts-ignore
+    if (global.blur_my_shell) {
+      return true;
+    }
+    const ext = Main.extensionManager?.lookup?.(BLUR_MY_SHELL_UUID);
+    if (ext && ext.state === 1) {
+      return true;
+    }
+  } catch {
+    // Graceful fallback
+  }
+  return false;
+}
+
+/**
+ * Gets configured Blur my Shell sigma/brightness parameters if accessible.
+ *
+ * @returns {{ sigma: number, brightness: number }}
+ */
+function getBlurParameters() {
+  try {
+    const schemaSource = Gio.SettingsSchemaSource.get_default();
+    if (schemaSource?.lookup('org.gnome.shell.extensions.blur-my-shell', true)) {
+      const bmsSettings = new Gio.Settings({
+        schema_id: 'org.gnome.shell.extensions.blur-my-shell',
+      });
+      const sigma = bmsSettings.get_int('sigma') || 30;
+      const brightness = bmsSettings.get_double('brightness') || 0.75;
+      return { sigma, brightness };
+    }
+  } catch {
+    // Fall back to default
+  }
+  return { sigma: 30, brightness: 0.75 };
+}
+
+/**
+ * Synchronizes the native Clutter Shell.BlurEffect on a PopupMenu box.
+ *
+ * @param {any} menu
+ * @param {string} mode
+ * @returns {void}
+ */
+export function syncMenuBlur(menu, mode = 'auto') {
+  if (!menu?.box) {
+    return;
+  }
+
+  const { box } = menu;
+  const shouldBlur = mode === 'always' || (mode === 'auto' && isBlurMyShellActive());
+
+  const existingEffect = box.get_effect?.(BLUR_EFFECT_NAME);
+
+  if (shouldBlur) {
+    if (!existingEffect) {
+      try {
+        const { sigma, brightness } = getBlurParameters();
+        // @ts-ignore
+        const effect = new Shell.BlurEffect({
+          name: BLUR_EFFECT_NAME,
+          mode: Shell.BlurMode?.BACKGROUND ?? 1,
+        });
+
+        if ('radius' in effect) {
+          effect.radius = sigma * 2;
+        } else if ('sigma' in effect) {
+          effect.sigma = sigma;
+        }
+
+        if ('brightness' in effect) {
+          effect.brightness = brightness;
+        }
+
+        box.add_effect(effect);
+      } catch {
+        // Fall through
+      }
+    }
+    box.add_style_class_name('lyricbar-blurred-menu');
+  } else {
+    if (existingEffect) {
+      box.remove_effect_by_name(BLUR_EFFECT_NAME);
+    }
+    box.remove_style_class_name('lyricbar-blurred-menu');
+  }
+}
+
 /**
  * @import { IndicatorViewModel } from '../domain/display/view-model.js'
  * @import { DetailsMenuState, DetailsMenuActions } from './details-menu.js'
  */
 
 class LyricBarIndicatorBase extends PanelMenu.Button {
-  /** @override */
-  _init() {
+  /**
+   * @override
+   * @param {any} [settings]
+   */
+  _init(settings = null) {
     super._init(0.0, 'LyricBar');
 
+    this._settings = settings;
     this._detailsMenu = null;
     this._detailsActions = null;
     this._menuBound = false;
+    this._extStateChangedId = null;
+    this._menuOpenStateId = null;
+    this._blurChangedId = null;
 
     /**
      * Last applied visual properties.
@@ -63,6 +169,44 @@ class LyricBarIndicatorBase extends PanelMenu.Button {
     this._lyricBarBox.add_child(this._lyricBarBin);
     this.add_child(this._lyricBarBox);
     this.label_actor = this._lyricBarLabel;
+
+    this._syncBlur();
+
+    this._menuOpenStateId = this.menu.connect(
+      'open-state-changed',
+      (/** @type {any} */ _menu, /** @type {boolean} */ isOpen) => {
+        if (isOpen) {
+          this._syncBlur();
+        }
+      },
+    );
+
+    if (this._settings) {
+      this._blurChangedId = this._settings.connect('changed::blur-effect', () => {
+        this._syncBlur();
+      });
+    }
+
+    if (Main.extensionManager) {
+      this._extStateChangedId = Main.extensionManager.connect(
+        'extension-state-changed',
+        (/** @type {any} */ _mgr, /** @type {any} */ ext) => {
+          if (ext?.uuid === BLUR_MY_SHELL_UUID) {
+            this._syncBlur();
+          }
+        },
+      );
+    }
+  }
+
+  /**
+   * Synchronize blur effect based on settings and Blur my Shell active state.
+   *
+   * @returns {void}
+   */
+  _syncBlur() {
+    const mode = this._settings?.get_string?.('blur-effect') ?? 'auto';
+    syncMenuBlur(this.menu, mode);
   }
 
   /**
@@ -167,6 +311,23 @@ class LyricBarIndicatorBase extends PanelMenu.Button {
 
   /** @override */
   destroy() {
+    if (this._extStateChangedId && Main.extensionManager) {
+      Main.extensionManager.disconnect(this._extStateChangedId);
+      this._extStateChangedId = null;
+    }
+    if (this._menuOpenStateId && this.menu) {
+      this.menu.disconnect(this._menuOpenStateId);
+      this._menuOpenStateId = null;
+    }
+    if (this._blurChangedId && this._settings) {
+      this._settings.disconnect(this._blurChangedId);
+      this._blurChangedId = null;
+    }
+    if (this.menu) {
+      syncMenuBlur(this.menu, 'disabled');
+    }
+    this._settings = null;
+
     this._detailsMenu?.destroy();
     this._detailsMenu = null;
     this._detailsActions = null;
@@ -178,9 +339,7 @@ class LyricBarIndicatorBase extends PanelMenu.Button {
   }
 }
 
-export const LyricBarIndicator = /** @type {typeof LyricBarIndicatorBase} */ (
-  GObject.registerClass(LyricBarIndicatorBase)
-);
+export const LyricBarIndicator = /** @type {any} */ (GObject.registerClass(LyricBarIndicatorBase));
 
 class LyricBarSettingsIndicatorBase extends PanelMenu.Button {
   /**
@@ -195,12 +354,43 @@ class LyricBarSettingsIndicatorBase extends PanelMenu.Button {
 
     this._settings = settings;
     this._extension = extension;
+    this._extStateChangedId = null;
+    this._menuOpenStateId = null;
+    this._blurChangedId = null;
 
     this._icon = new St.Icon({
       gicon: Gio.Icon.new_for_string('audio-x-generic-symbolic'),
       style_class: 'system-status-icon',
     });
     this.add_child(this._icon);
+
+    this._syncBlur();
+
+    this._menuOpenStateId = this.menu.connect(
+      'open-state-changed',
+      (/** @type {any} */ _menu, /** @type {boolean} */ isOpen) => {
+        if (isOpen) {
+          this._syncBlur();
+        }
+      },
+    );
+
+    if (this._settings) {
+      this._blurChangedId = this._settings.connect('changed::blur-effect', () => {
+        this._syncBlur();
+      });
+    }
+
+    if (Main.extensionManager) {
+      this._extStateChangedId = Main.extensionManager.connect(
+        'extension-state-changed',
+        (/** @type {any} */ _mgr, /** @type {any} */ ext) => {
+          if (ext?.uuid === BLUR_MY_SHELL_UUID) {
+            this._syncBlur();
+          }
+        },
+      );
+    }
 
     // Panel Position Submenu
     this._positionSubMenu = new PopupMenu.PopupSubMenuMenuItem(
@@ -306,8 +496,34 @@ class LyricBarSettingsIndicatorBase extends PanelMenu.Button {
     this._alignRightItem?.setOrnament(currentAlign === 'right' ? Ornament.DOT : Ornament.NONE);
   }
 
+  /**
+   * Synchronize blur effect based on settings and Blur my Shell active state.
+   *
+   * @returns {void}
+   */
+  _syncBlur() {
+    const mode = this._settings?.get_string?.('blur-effect') ?? 'auto';
+    syncMenuBlur(this.menu, mode);
+  }
+
   /** @override */
   destroy() {
+    if (this._extStateChangedId && Main.extensionManager) {
+      Main.extensionManager.disconnect(this._extStateChangedId);
+      this._extStateChangedId = null;
+    }
+    if (this._menuOpenStateId && this.menu) {
+      this.menu.disconnect(this._menuOpenStateId);
+      this._menuOpenStateId = null;
+    }
+    if (this._blurChangedId && this._settings) {
+      this._settings.disconnect(this._blurChangedId);
+      this._blurChangedId = null;
+    }
+    if (this.menu) {
+      syncMenuBlur(this.menu, 'disabled');
+    }
+
     if (this._settings && this._posChangedId) {
       this._settings.disconnect(this._posChangedId);
       this._posChangedId = null;

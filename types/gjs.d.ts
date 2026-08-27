@@ -82,6 +82,29 @@ declare module 'gi://Soup' {
   export default Soup;
 }
 
+declare module 'gi://Shell' {
+  export namespace BlurMode {
+    export const ACTOR: number;
+    export const BACKGROUND: number;
+  }
+  export class BlurEffect {
+    constructor(params?: {
+      name?: string;
+      sigma?: number;
+      radius?: number;
+      brightness?: number;
+      mode?: number;
+    });
+    name: string;
+    sigma: number;
+    radius: number;
+    brightness: number;
+    mode: number;
+  }
+  const Shell: any;
+  export default Shell;
+}
+
 declare module 'gi://St' {
   export class Bin {
     constructor(config?: {
@@ -258,6 +281,7 @@ declare module 'resource:///org/gnome/shell/ui/main.js' {
       box?: 'left' | 'center' | 'right',
     ): void;
   };
+  export const extensionManager: any;
 }
 
 declare module 'resource:///org/gnome/shell/ui/panelMenu.js' {

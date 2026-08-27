@@ -108,6 +108,7 @@ function settings(playerPriority, overrides = {}) {
     textShadowEnabled: true,
     glowStrength: 1.0,
     autoWidth: true,
+    blurEffect: 'auto',
     ...overrides,
   };
 }

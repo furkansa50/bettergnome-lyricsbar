@@ -198,7 +198,7 @@ export function buildDetailsMenu(menu, actions) {
 
   const sourceTitleLabel = new St.Label({
     style_class: 'lyricbar-details-source-title',
-    text: _t('Lyrics source', 'Söz kaynağı'),
+    text: _t('Lyrics source', 'Şarkı sözü kaynağı'),
     y_align: Clutter.ActorAlign.CENTER,
   });
   const sourceBadgeLabel = new St.Label({
@@ -585,7 +585,7 @@ function rebuildLyricLabels(lyricsBox, lyrics, actions, getSeekEnabled) {
     lyricsBox.add_child(
       new St.Label({
         style_class: 'lyricbar-details-no-lyrics',
-        text: _t('No lyrics available', 'Söz bulunamadı'),
+        text: _t('No lyrics found', 'Şarkı sözü bulunamadı'),
       }),
     );
     return [];

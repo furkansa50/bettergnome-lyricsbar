@@ -361,7 +361,9 @@ export class LyricBarController {
       return;
     }
 
-    const indicator = /** @type {IndicatorHandle} */ (new LyricBarIndicator());
+    const indicator = /** @type {IndicatorHandle} */ (
+      new LyricBarIndicator(this.#extension.getSettings())
+    );
     let destroyed = false;
     this.#indicator = indicator;
     this.#destroyIndicator = () => {

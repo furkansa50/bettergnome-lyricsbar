@@ -5,6 +5,7 @@
  * @typedef {'auto' | 'spotify' | 'youtube-music' | 'apple-music' | 'generic'} BrowserPlayerService
  * @typedef {'musixmatch' | 'better-lyrics' | 'lrclib'} LyricsSource
  * @typedef {'default' | 'system' | 'white' | 'black' | 'custom'} TextColorMode
+ * @typedef {'auto' | 'always' | 'disabled'} BlurEffectMode
  *
  * @typedef {Readonly<{
  *   panelPosition?: unknown,
@@ -23,6 +24,7 @@
  *   textShadowEnabled?: unknown,
  *   glowStrength?: unknown,
  *   autoWidth?: unknown,
+ *   blurEffect?: unknown,
  * }>} RawSettings
  *
  * @typedef {Readonly<{
@@ -42,6 +44,7 @@
  *   textShadowEnabled: boolean,
  *   glowStrength: number,
  *   autoWidth: boolean,
+ *   blurEffect: BlurEffectMode,
  * }>} LyricBarSettings
  */
 

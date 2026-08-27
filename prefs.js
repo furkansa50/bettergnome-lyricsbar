@@ -365,6 +365,46 @@ export default class LyricBarPreferences extends ExtensionPreferences {
     appearanceGroup.add(textShadowRow);
     appearanceGroup.add(glowStrengthRow);
 
+    // blur-effect: ComboRow
+    const blurModes = ['auto', 'always', 'disabled'];
+    const blurEffectRow = new Adw.ComboRow({
+      title: _t('Blur effect (Blur my Shell)', 'Bulanıklık efekti (Blur my Shell)'),
+      subtitle: _t(
+        'Frosted-glass background blur on the details menu. In Auto, activates when Blur my Shell is enabled.',
+        'Ayrıntılar menüsünde buzlu cam arka plan bulanıklığı. Otomatik modda Blur my Shell etkinken devreye girer.',
+      ),
+      model: new Gtk.StringList({
+        strings: [
+          _t('Auto (Blur my Shell)', 'Otomatik (Blur my Shell)'),
+          _t('Always On', 'Her Zaman Açık'),
+          _t('Disabled', 'Devre Dışı'),
+        ],
+      }),
+    });
+    const currentBlurMode = settings.get_string('blur-effect');
+    const blurModeIndex = blurModes.indexOf(currentBlurMode);
+    if (blurModeIndex !== -1) {
+      blurEffectRow.selected = blurModeIndex;
+    }
+    const blurModeNotifyId = blurEffectRow.connect('notify::selected', () => {
+      const { selected } = blurEffectRow;
+      if (selected >= 0 && selected < blurModes.length) {
+        settings.set_string('blur-effect', blurModes[selected]);
+      }
+    });
+    connections.push([blurEffectRow, blurModeNotifyId]);
+
+    const blurModeChangedId = settings.connect('changed::blur-effect', () => {
+      const current = settings.get_string('blur-effect');
+      const idx = blurModes.indexOf(current);
+      if (idx !== -1 && blurEffectRow.selected !== idx) {
+        blurEffectRow.selected = idx;
+      }
+    });
+    connections.push([settings, blurModeChangedId]);
+
+    appearanceGroup.add(blurEffectRow);
+
     // 2. Behavior Group
     const behaviorGroup = new Adw.PreferencesGroup({
       title: _t('Behavior', 'Davranış'),
@@ -904,6 +944,7 @@ function buildDiagnosticsMarkdown(metadata, settings) {
     `| Style text color type | ${escapeMarkdownTable(settings.get_string('style-text-color-type'))} |`,
     `| Style text color custom | ${escapeMarkdownTable(settings.get_string('style-text-color-custom'))} |`,
     `| Style text shadow | ${formatBoolean(settings.get_boolean('style-text-shadow'))} |`,
+    `| Blur effect | ${escapeMarkdownTable(settings.get_string('blur-effect'))} |`,
     '',
     'This diagnostic block intentionally excludes lyrics, listening history, logs, local file paths, and MPRIS metadata.',
   ].join('\n');

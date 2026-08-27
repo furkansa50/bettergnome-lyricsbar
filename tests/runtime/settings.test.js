@@ -29,6 +29,7 @@ describe('SettingsAdapter', () => {
       textShadowEnabled: true,
       glowStrength: 1.0,
       autoWidth: true,
+      blurEffect: 'auto',
     });
   });
 
@@ -40,16 +41,16 @@ describe('SettingsAdapter', () => {
 
     adapter.subscribe(callback);
 
-    expect(backend.connect).toHaveBeenCalledTimes(16);
+    expect(backend.connect).toHaveBeenCalledTimes(17);
     backend.emit('changed::max-width');
 
     expect(callback).toHaveBeenCalledWith(adapter.read());
 
     lifecycle.dispose();
 
-    expect(backend.disconnect).toHaveBeenCalledTimes(16);
-    expect(backend.disconnect).toHaveBeenNthCalledWith(1, 16);
-    expect(backend.disconnect).toHaveBeenNthCalledWith(16, 1);
+    expect(backend.disconnect).toHaveBeenCalledTimes(17);
+    expect(backend.disconnect).toHaveBeenNthCalledWith(1, 17);
+    expect(backend.disconnect).toHaveBeenNthCalledWith(17, 1);
   });
 
   it('sets lyrics source on the underlying settings backend', () => {
@@ -92,6 +93,9 @@ function createSettingsBackend(overrides = {}) {
       }
       if (key === 'style-text-color-custom') {
         return '#ffffff';
+      }
+      if (key === 'blur-effect') {
+        return 'auto';
       }
       return '';
     }),

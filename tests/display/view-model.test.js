@@ -24,6 +24,7 @@ const baseSettings = {
   textShadowEnabled: true,
   glowStrength: 1.0,
   autoWidth: true,
+  blurEffect: 'auto',
 };
 
 describe('buildIndicatorViewModel', () => {
