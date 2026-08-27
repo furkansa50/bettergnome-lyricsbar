@@ -70,6 +70,15 @@ Browser player support is powered by the browser's native MPRIS integration. Bet
 
 ## Install
 
+### GNOME Extensions Store 
+
+Install directly from the official store or Extension Manager:
+
+- **Web:** Search for **Better Lyrics Bar** on [extensions.gnome.org](https://extensions.gnome.org/).
+- **Extension Manager App:** Open **Extension Manager**, go to the **Browse** tab, search for `Better Lyrics Bar`, and click **Install**.
+
+### Command Line Install
+
 Recommended install (includes automatic daily updates):
 
 ```bash
