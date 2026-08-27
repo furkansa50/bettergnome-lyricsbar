@@ -3,5 +3,6 @@ dist/
 coverage/
 .tmp/
 .kilo/
+.zcode/
 *.log
 .claude/settings.local.json
