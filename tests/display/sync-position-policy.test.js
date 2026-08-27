@@ -144,12 +144,12 @@ describe('shouldHoldLowConfidenceSyncedPosition', () => {
     ).toBe(false);
   });
 
-  it('does not hold Firefox YouTube Music samples when duration is available', () => {
+  it('holds Firefox YouTube Music zero-position samples even when duration is available', () => {
     expect(
       shouldHoldLowConfidenceSyncedPosition(firefoxYoutubeSnapshot({ durationMs: 202000 }), 0, {
         hasPreviousSyncedLine: true,
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('does not hold Chromium browser samples', () => {
@@ -167,7 +167,7 @@ describe('shouldHoldLowConfidenceSyncedPosition', () => {
     ).toBe(false);
   });
 
-  it('does not hold non-YouTube Firefox browser samples', () => {
+  it('holds non-YouTube Firefox browser zero-position samples during playback', () => {
     expect(
       shouldHoldLowConfidenceSyncedPosition(
         firefoxYoutubeSnapshot({
@@ -178,7 +178,7 @@ describe('shouldHoldLowConfidenceSyncedPosition', () => {
           hasPreviousSyncedLine: true,
         },
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 });
 

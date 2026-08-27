@@ -6,6 +6,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {
   displayStateFromLookup,
   displayStateFromSyncedPosition,
+  selectSyncedHighlight,
 } from '../domain/display/lyrics-state.js';
 import { displayStateFromPlayer } from '../domain/display/player-state.js';
 import {
@@ -18,7 +19,16 @@ import {
   shouldPollPlayerPosition,
   shouldPollSyncedLyrics,
 } from '../domain/display/sync-polling.js';
+import {
+  estimatePositionMs,
+  isPositionClockAdvancing,
+  retargetPositionClock,
+  setPositionClockAdvancing,
+  syncPositionClock,
+} from '../domain/display/position-clock.js';
+import { shouldHideIndicator } from '../domain/display/visibility.js';
 import { buildIndicatorViewModel } from '../domain/display/view-model.js';
+import { computeTargetSetPositionMs } from '../domain/display/track-progress.js';
 import { selectLyricLineIndex } from '../domain/lyrics/lrc.js';
 import { selectActivePlayer } from '../domain/mpris/selection.js';
 import {
@@ -45,6 +55,7 @@ import { SettingsAdapter } from './settings.js';
  * @import { PlayerSnapshot } from '../domain/mpris/types.js'
  * @import { LyricBarSettings } from '../domain/settings/types.js'
  * @import { StagnantSyncedPositionEstimate } from '../domain/display/sync-position-estimator.js'
+ * @import { PositionClock } from '../domain/display/position-clock.js'
  * @import { GSettingsBackend } from './settings.js'
  *
  * @typedef {Readonly<{
@@ -66,8 +77,29 @@ import { SettingsAdapter } from './settings.js';
  * }} TrackedProxy
  */
 
+/**
+ * Cadence of the MPRIS `Position` read.
+ *
+ * Each tick is a D-Bus round trip, so this stays coarse; it only has to
+ * re-anchor the local clock often enough to correct drift and to notice
+ * external seeks on players that do not emit `Seeked`.
+ */
 const POSITION_POLL_INTERVAL_MS = 500;
+
+/**
+ * Cadence of the local word-highlight tick.
+ *
+ * Words last roughly 150-400 ms, so a 500 ms clock cannot place a per-word
+ * highlight: it lands up to a full interval late and skips words entirely.
+ * This tick does no I/O -- it interpolates the last sampled position and
+ * re-renders only when the highlight actually moves.
+ */
+const WORD_TICK_INTERVAL_MS = 80;
+
 const FIREFOX_STAGNANT_POSITION_THRESHOLD_MS = 2_500;
+
+/** Offset applied by the rewind and fast-forward controls. */
+const SEEK_STEP_MS = 10_000;
 
 export class LyricBarController {
   /** @type {ExtensionHandle} */
@@ -127,11 +159,44 @@ export class LyricBarController {
   /** @type {number} */
   #syncSourceId = 0;
 
+  /**
+   * Local word-highlight tick. Separate from the position poll so the highlight
+   * can advance without generating D-Bus traffic.
+   *
+   * @type {number}
+   */
+  #wordTickSourceId = 0;
+
   /** @type {string | null} */
   #lastSyncedLine = null;
 
   /** @type {number} */
   #lastActiveWordIndex = -1;
+
+  /**
+   * Cheap fingerprint of the last rendered selection indices.
+   *
+   * The word tick fires far more often than the highlight actually moves, so
+   * this is compared before any display state is rebuilt.
+   *
+   * @type {string | null}
+   */
+  #lastHighlightKey = null;
+
+  /**
+   * Interpolated playback clock, re-anchored by every accepted position sample.
+   *
+   * @type {PositionClock | null}
+   */
+  #positionClock = null;
+
+  /**
+   * Subject the sync loop is currently following. A change means the loop must
+   * resync immediately instead of waiting for its next scheduled tick.
+   *
+   * @type {string | null}
+   */
+  #syncSubjectKey = null;
 
   /** @type {number | null} */
   #lastKnownPositionMs = null;
@@ -183,6 +248,10 @@ export class LyricBarController {
     this.#lifecycle = new LifecycleRegistry();
     this.#lifecycle.addSource(
       () => this.#syncSourceId,
+      (id) => GLib.source_remove(id),
+    );
+    this.#lifecycle.addSource(
+      () => this.#wordTickSourceId,
       (id) => GLib.source_remove(id),
     );
     this.#settings = new SettingsAdapter(this.#extension.getSettings(), this.#lifecycle);
@@ -250,6 +319,8 @@ export class LyricBarController {
     this.#stopSyncLoop();
     this.#lastKnownPositionMs = null;
     this.#lastPositionTrackKey = null;
+    this.#positionClock = null;
+    this.#syncSubjectKey = null;
     this.#displayState = { kind: 'idle' };
     lifecycle?.dispose();
     this.#indicator = null;
@@ -381,12 +452,175 @@ export class LyricBarController {
       onPlayPause: () => this.#invokePlayerControl((proxy) => proxy.playPause()),
       onNext: () => this.#invokePlayerControl((proxy) => proxy.next()),
       onPrevious: () => this.#invokePlayerControl((proxy) => proxy.previous()),
-      onSeek: (positionMs) => {
-        this.#invokePlayerControl((proxy) => {
-          proxy.setPosition(this.#activePlayer?.trackId ?? null, positionMs);
-        });
-      },
+      onSeek: (positionMs) => this.#seekToPosition(positionMs),
+      onSeekBy: (offsetMs) => this.#seekByOffset(offsetMs),
     });
+  }
+
+  /**
+   * Seek to an absolute position, e.g. a progress-bar click.
+   *
+   * `SetPosition` is preferred because it is exact, but it requires a valid
+   * `mpris:trackid`; players that do not publish one are seeked relative to the
+   * current estimate instead, which is the difference between a working control
+   * and a click that silently does nothing.
+   *
+   * @param {number} positionMs
+   * @returns {void}
+   */
+  #seekToPosition(positionMs) {
+    if (typeof positionMs !== 'number' || !Number.isFinite(positionMs) || positionMs < 0) {
+      return;
+    }
+
+    const trackId = this.#activePlayer?.trackId ?? null;
+    this.#invokePlayerControl((proxy) => {
+      if (!proxy.canSeek) {
+        this.#logger?.debug('seek-rejected', { reason: 'player-reports-can-seek-false' });
+        return;
+      }
+
+      if (typeof trackId === 'string' && trackId !== '') {
+        const targetMs = computeTargetSetPositionMs(positionMs, this.#syncPositionOffsetMs);
+        proxy.setPosition(trackId, targetMs);
+      } else {
+        const currentMs = this.#currentPositionMs();
+        if (currentMs === null) {
+          // Without a current position a relative seek would jump by the whole
+          // target instead of to it, so refuse rather than scramble playback.
+          this.#logger?.debug('seek-rejected', { reason: 'no-track-id-and-no-known-position' });
+          return;
+        }
+        proxy.seek(positionMs - currentMs);
+      }
+
+      this.#applyOptimisticSeek(positionMs);
+    });
+  }
+
+  /**
+   * Seek relative to the current position, i.e. rewind and fast-forward.
+   *
+   * @param {number} offsetMs Signed offset in milliseconds.
+   * @returns {void}
+   */
+  #seekByOffset(offsetMs) {
+    if (typeof offsetMs !== 'number' || !Number.isFinite(offsetMs) || offsetMs === 0) {
+      return;
+    }
+
+    this.#invokePlayerControl((proxy) => {
+      if (!proxy.canSeek) {
+        this.#logger?.debug('seek-rejected', { reason: 'player-reports-can-seek-false' });
+        return;
+      }
+
+      proxy.seek(offsetMs);
+
+      const currentMs = this.#currentPositionMs();
+      if (currentMs === null) {
+        return;
+      }
+
+      const durationMs = this.#activePlayer?.durationMs ?? null;
+      const target = Math.max(0, currentMs + offsetMs);
+      this.#applyOptimisticSeek(
+        typeof durationMs === 'number' && durationMs > 0 ? Math.min(target, durationMs) : target,
+      );
+    });
+  }
+
+  /**
+   * Move the local clock and the visible state to a just-requested position.
+   *
+   * The player's own report is up to a poll interval away, so without this the
+   * lyric line and progress bar keep showing the pre-seek position and then
+   * snap, which reads as a broken control.
+   *
+   * @param {number} positionMs
+   * @returns {void}
+   */
+  #applyOptimisticSeek(positionMs) {
+    this.#positionClock = retargetPositionClock(this.#positionClock, positionMs, monotonicNowMs());
+    this.#lastKnownPositionMs = positionMs;
+    this.#lastAcceptedSyncPositionMs = positionMs;
+    this.#syncPositionEstimate = null;
+    this.#renderSyncedPosition(positionMs);
+    this.#renderDetails();
+  }
+
+  /**
+   * Handle a `Seeked` signal from a player.
+   *
+   * @param {string} busName
+   * @param {number} positionMs
+   * @returns {void}
+   */
+  #handleSeeked(busName, positionMs) {
+    if (!this.#enabled || this.#activePlayer?.busName !== busName) {
+      return;
+    }
+
+    const normalizedMs = this.#normalizeSeekedPosition(positionMs);
+    if (normalizedMs === null) {
+      return;
+    }
+
+    this.#positionClock = retargetPositionClock(
+      this.#positionClock,
+      normalizedMs,
+      monotonicNowMs(),
+    );
+    this.#lastKnownPositionMs = normalizedMs;
+    this.#lastAcceptedSyncPositionMs = normalizedMs;
+    this.#syncPositionEstimate = null;
+    this.#renderSyncedPosition(normalizedMs);
+    this.#renderDetails();
+  }
+
+  /**
+   * Apply the same normalization the poll path applies, so a `Seeked` payload
+   * from a player with a cumulative media-session clock is not taken literally.
+   *
+   * @param {number} positionMs
+   * @returns {number | null}
+   */
+  #normalizeSeekedPosition(positionMs) {
+    if (typeof positionMs !== 'number' || !Number.isFinite(positionMs) || positionMs < 0) {
+      return null;
+    }
+
+    if (this.#syncPositionOffsetMs === null) {
+      return positionMs;
+    }
+
+    return Math.max(0, positionMs - this.#syncPositionOffsetMs);
+  }
+
+  /**
+   * Best current position: the interpolated clock when it is usable, otherwise
+   * the last sampled value.
+   *
+   * @returns {number | null}
+   */
+  #currentPositionMs() {
+    const estimated = estimatePositionMs(
+      this.#positionClock,
+      monotonicNowMs(),
+      this.#activePositionTrackKey(),
+    );
+    return estimated ?? this.#lastKnownPositionMs;
+  }
+
+  /**
+   * @returns {string | null}
+   */
+  #activePositionTrackKey() {
+    const player = this.#activePlayer;
+    if (player === null) {
+      return null;
+    }
+    return [player.busName, player.trackId, player.title, player.artist].join('|');
   }
 
   /**
@@ -523,6 +757,9 @@ export class LyricBarController {
       this.#refreshPeerPlayerProperties(proxy.busName);
       this.#refreshSelection();
     });
+    proxy.onSeeked((positionMs) => {
+      this.#handleSeeked(busName, positionMs);
+    });
     this.#proxies.set(busName, { proxy, lifecycle: child });
     proxy.start();
   }
@@ -574,12 +811,34 @@ export class LyricBarController {
 
     this.#activePlayer = active;
     this.#invalidateStalePosition();
+    this.#syncClockAdvancing();
     if (this.#lyricsService !== null) {
       this.#lyricsService.setActivePlayer(active);
     } else {
       this.#refreshDisplay();
     }
     this.#updateSyncLoop();
+  }
+
+  /**
+   * Keep the interpolated clock in step with playback state.
+   *
+   * A paused player's position does not move, so the clock must stop advancing;
+   * otherwise the highlight keeps walking through the line while the music is
+   * stopped and is wrong by the length of the pause on resume.
+   *
+   * @returns {void}
+   */
+  #syncClockAdvancing() {
+    if (this.#positionClock === null) {
+      return;
+    }
+
+    this.#positionClock = setPositionClockAdvancing(
+      this.#positionClock,
+      this.#activePlayer?.playbackStatus === 'Playing',
+      monotonicNowMs(),
+    );
   }
 
   /**
@@ -599,6 +858,9 @@ export class LyricBarController {
     } else {
       this.#displayState = displayStateFromLookup(this.#activePlayer, this.#currentLookup, {
         previousState: this.#displayState,
+        // Without a position a synced lookup paints the song's first line, which
+        // is wrong for any track already in progress.
+        positionMs: this.#syncedPositionForFirstPaint(),
       });
     }
 
@@ -607,16 +869,26 @@ export class LyricBarController {
   }
 
   /**
+   * Position to use for the first paint of a synced lookup, or null when none is
+   * trustworthy yet.
+   *
+   * @returns {number | null}
+   */
+  #syncedPositionForFirstPaint() {
+    if (this.#currentLookup?.kind !== 'synced') {
+      return null;
+    }
+
+    return this.#currentPositionMs();
+  }
+
+  /**
    * Forget the cached position when it no longer describes the active track.
    *
    * @returns {void}
    */
   #invalidateStalePosition() {
-    const player = this.#activePlayer;
-    const key =
-      player === null
-        ? null
-        : [player.busName, player.trackId, player.title, player.artist].join('|');
+    const key = this.#activePositionTrackKey();
 
     if (key === this.#lastPositionTrackKey) {
       return;
@@ -624,6 +896,9 @@ export class LyricBarController {
 
     this.#lastPositionTrackKey = key;
     this.#lastKnownPositionMs = null;
+    // The interpolated clock belongs to the previous track; keeping it would
+    // extrapolate the old song's position onto the new one.
+    this.#positionClock = null;
   }
 
   /**
@@ -641,30 +916,236 @@ export class LyricBarController {
       return;
     }
 
-    if (this.#syncSourceId !== 0) {
+    const subjectKey = this.#buildSyncSubjectKey();
+
+    if (this.#syncSourceId === 0) {
+      this.#resetSyncPositionOffset();
+      this.#logger?.debug('sync-loop-start', {
+        intervalMs: POSITION_POLL_INTERVAL_MS,
+        title: this.#activePlayer?.title ?? null,
+      });
+      this.#syncSubjectKey = subjectKey;
+      this.#resetHighlightMemo();
+      this.#pollPosition();
+      this.#syncSourceId = GLib.timeout_add(
+        GLib.PRIORITY_DEFAULT,
+        POSITION_POLL_INTERVAL_MS,
+        () => {
+          if (!this.#shouldPollPosition()) {
+            this.#logger?.debug('sync-loop-stop');
+            this.#syncSourceId = 0;
+            this.#resetHighlightMemo();
+            this.#resetSyncPositionOffset();
+            this.#stopWordTick();
+            return GLib.SOURCE_REMOVE;
+          }
+          this.#pollPosition();
+          return GLib.SOURCE_CONTINUE;
+        },
+      );
+      this.#updateWordTick();
       return;
     }
 
-    this.#resetSyncPositionOffset();
-    this.#logger?.debug('sync-loop-start', {
-      intervalMs: POSITION_POLL_INTERVAL_MS,
-      title: this.#activePlayer?.title ?? null,
-    });
-    this.#lastSyncedLine = null;
-    this.#lastActiveWordIndex = -1;
-    this.#pollPosition();
-    this.#syncSourceId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, POSITION_POLL_INTERVAL_MS, () => {
-      if (!this.#shouldPollPosition()) {
-        this.#logger?.debug('sync-loop-stop');
-        this.#syncSourceId = 0;
-        this.#lastSyncedLine = null;
-        this.#lastActiveWordIndex = -1;
-        this.#resetSyncPositionOffset();
+    // Already polling. A new track or a newly arrived lookup must not wait for
+    // the next scheduled tick: that delay is exactly the "lyrics appear late"
+    // symptom when the loop was kept alive across a track change.
+    if (subjectKey !== this.#syncSubjectKey) {
+      this.#syncSubjectKey = subjectKey;
+      this.#resetHighlightMemo();
+      this.#logger?.debug('sync-loop-resync', { title: this.#activePlayer?.title ?? null });
+      this.#pollPosition();
+    }
+
+    this.#updateWordTick();
+  }
+
+  /**
+   * Identity of what the sync loop is currently following.
+   *
+   * The lookup is included by identity because the controller reuses one frozen
+   * lookup object per track: a new object means new lyrics to paint.
+   *
+   * @returns {string | null}
+   */
+  #buildSyncSubjectKey() {
+    const player = this.#activePlayer;
+    if (player === null) {
+      return null;
+    }
+
+    return [
+      player.busName,
+      player.trackId,
+      player.title,
+      player.artist,
+      this.#currentLookup === null ? 'none' : this.#currentLookup.kind,
+      this.#lookupGeneration(),
+    ].join('\u0000');
+  }
+
+  /**
+   * Stable per-lookup marker derived from object identity.
+   *
+   * @returns {string}
+   */
+  #lookupGeneration() {
+    const lookup = this.#currentLookup;
+    if (lookup === null) {
+      return '0';
+    }
+    if (lookup.kind === 'synced') {
+      return `${lookup.lines.length}:${lookup.wordLines?.length ?? 0}:${lookup.track.trackName}`;
+    }
+    return lookup.kind;
+  }
+
+  /**
+   * Start, stop, or leave running the local word-highlight tick.
+   *
+   * @returns {void}
+   */
+  #updateWordTick() {
+    if (!this.#shouldRunWordTick()) {
+      this.#stopWordTick();
+      return;
+    }
+
+    if (this.#wordTickSourceId !== 0) {
+      return;
+    }
+
+    this.#logger?.debug('word-tick-start', { intervalMs: WORD_TICK_INTERVAL_MS });
+    this.#wordTickSourceId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, WORD_TICK_INTERVAL_MS, () => {
+      if (!this.#shouldRunWordTick()) {
+        this.#logger?.debug('word-tick-stop');
+        this.#wordTickSourceId = 0;
         return GLib.SOURCE_REMOVE;
       }
-      this.#pollPosition();
+      this.#tickWordHighlight();
       return GLib.SOURCE_CONTINUE;
     });
+  }
+
+  /**
+   * The tick only earns its keep when the active lookup carries word timings and
+   * the player is actually advancing; otherwise the highlight cannot move.
+   *
+   * @returns {boolean}
+   */
+  #shouldRunWordTick() {
+    if (!this.#enabled || this.#activePlayer === null) {
+      return false;
+    }
+
+    if (this.#activePlayer.playbackStatus !== 'Playing') {
+      return false;
+    }
+
+    // A clock whose anchor has gone stale returns a constant position, so the
+    // tick could no longer change anything. That happens for a whole track when
+    // the poll keeps rejecting samples, and spinning on it would burn the shell
+    // main loop for nothing. Accepting a sample re-arms the tick.
+    if (!isPositionClockAdvancing(this.#positionClock, monotonicNowMs())) {
+      return false;
+    }
+
+    const lookup = this.#currentLookup;
+    if (lookup === null || lookup.kind !== 'synced') {
+      return false;
+    }
+
+    return (lookup.wordLines?.length ?? 0) > 0 && this.#shouldPollSyncedLyrics();
+  }
+
+  /**
+   * Forget the memoized selection so the next position re-renders.
+   *
+   * @returns {void}
+   */
+  #resetHighlightMemo() {
+    this.#lastSyncedLine = null;
+    this.#lastActiveWordIndex = -1;
+    this.#lastHighlightKey = null;
+  }
+
+  /**
+   * @returns {void}
+   */
+  #stopWordTick() {
+    if (this.#wordTickSourceId === 0) {
+      return;
+    }
+
+    try {
+      GLib.source_remove(this.#wordTickSourceId);
+    } catch {
+      // already removed by GLib
+    }
+    this.#logger?.debug('word-tick-stop');
+    this.#wordTickSourceId = 0;
+  }
+
+  /**
+   * Advance the word highlight from the interpolated clock.
+   *
+   * @returns {void}
+   */
+  #tickWordHighlight() {
+    const positionMs = estimatePositionMs(
+      this.#positionClock,
+      monotonicNowMs(),
+      this.#activePositionTrackKey(),
+    );
+    if (positionMs === null) {
+      return;
+    }
+
+    this.#lastKnownPositionMs = positionMs;
+    this.#renderSyncedPosition(positionMs);
+  }
+
+  /**
+   * Recompute the panel state for a position and render only when the visible
+   * line or highlighted word actually changed.
+   *
+   * @param {number} positionMs
+   * @returns {void}
+   */
+  #renderSyncedPosition(positionMs) {
+    const player = this.#activePlayer;
+    const lookup = this.#currentLookup;
+    if (player === null || lookup === null || lookup.kind !== 'synced') {
+      return;
+    }
+
+    // Cheap check first: on most ticks the highlight has not moved, and the
+    // selection indices alone decide that. Building the display state and its
+    // per-word markup before this comparison did the full work and threw it
+    // away several times per second.
+    const highlight = selectSyncedHighlight(lookup, positionMs);
+    const highlightKey = `${highlight.lineIndex}:${highlight.wordLineIndex}:${highlight.activeWordIndex}`;
+    if (highlightKey === this.#lastHighlightKey) {
+      return;
+    }
+    this.#lastHighlightKey = highlightKey;
+
+    const next = displayStateFromSyncedPosition(player, lookup, positionMs);
+    const line = next.kind === 'lyrics' ? next.line : null;
+    const activeWordIndex = next.kind === 'lyrics' ? next.activeWordIndex : -1;
+
+    if (line === this.#lastSyncedLine && activeWordIndex === this.#lastActiveWordIndex) {
+      return;
+    }
+
+    if (line !== this.#lastSyncedLine) {
+      this.#logger?.debug('sync-line-selected', { positionMs, text: line });
+    }
+
+    this.#lastSyncedLine = line;
+    this.#lastActiveWordIndex = activeWordIndex;
+    this.#displayState = next;
+    this.#render();
   }
 
   /**
@@ -702,8 +1183,9 @@ export class LyricBarController {
       this.#logger?.debug('sync-loop-stop');
       this.#syncSourceId = 0;
     }
-    this.#lastSyncedLine = null;
-    this.#lastActiveWordIndex = -1;
+    this.#stopWordTick();
+    this.#syncSubjectKey = null;
+    this.#resetHighlightMemo();
     this.#resetSyncPositionOffset();
   }
 
@@ -737,40 +1219,70 @@ export class LyricBarController {
       if (syncedLookup === null || !this.#shouldPollSyncedLyrics()) {
         // No synced lyrics to advance: the position still feeds the popup's
         // elapsed clock and progress bar.
-        this.#lastKnownPositionMs = positionMs;
+        const isHeldZero = shouldHoldLowConfidenceSyncedPosition(player, positionMs, {
+          hasAcceptedSyncedPosition: this.#lastAcceptedSyncPositionMs !== null,
+          hasPreviousSyncedLine: this.#lastSyncedLine !== null,
+          trackDurationMs: player.durationMs,
+        });
+
+        if (!isHeldZero) {
+          this.#lastKnownPositionMs = positionMs;
+          this.#lastAcceptedSyncPositionMs = positionMs;
+          this.#anchorPositionClock(player, positionMs, player.durationMs, tracked.proxy.rate);
+        }
         this.#renderDetails();
         return;
       }
 
       const effectivePositionMs = this.#resolveSyncedPosition(player, syncedLookup, positionMs);
       if (effectivePositionMs === null) {
+        const currentMs = this.#currentPositionMs();
+        if (currentMs !== null) {
+          this.#renderSyncedPosition(currentMs);
+          this.#renderDetails();
+        }
         return;
       }
 
       this.#lastKnownPositionMs = effectivePositionMs;
+      this.#anchorPositionClock(
+        player,
+        effectivePositionMs,
+        player.durationMs ?? syncedLookup.track.durationMs,
+        tracked.proxy.rate,
+      );
 
-      const next = displayStateFromSyncedPosition(player, syncedLookup, effectivePositionMs);
-      const line = next.kind === 'lyrics' ? next.line : null;
-      const activeWordIndex = next.kind === 'lyrics' ? next.activeWordIndex : -1;
-
-      if (line !== this.#lastSyncedLine || activeWordIndex !== this.#lastActiveWordIndex) {
-        const lineChanged = line !== this.#lastSyncedLine;
-        this.#lastSyncedLine = line;
-        this.#lastActiveWordIndex = activeWordIndex;
-        if (lineChanged) {
-          this.#logger?.debug('sync-line-selected', {
-            positionMs: effectivePositionMs,
-            rawPositionMs: positionMs,
-            text: line,
-          });
-        }
-        this.#displayState = next;
-        this.#render();
-      }
+      this.#renderSyncedPosition(effectivePositionMs);
+      this.#updateWordTick();
 
       // The popup's clock and progress bar advance on every tick, not only when
       // the active line changes.
       this.#renderDetails();
+    });
+  }
+
+  /**
+   * Re-anchor the interpolated clock on a freshly accepted position sample.
+   *
+   * @param {PlayerSnapshot} player
+   * @param {number} positionMs
+   * @param {number | null} durationMs
+   * @param {number} rate
+   * @returns {void}
+   */
+  #anchorPositionClock(player, positionMs, durationMs, rate) {
+    const trackKey = this.#activePositionTrackKey();
+    if (trackKey === null) {
+      return;
+    }
+
+    this.#positionClock = syncPositionClock(this.#positionClock, {
+      trackKey,
+      positionMs,
+      nowMs: monotonicNowMs(),
+      advancing: player.playbackStatus === 'Playing',
+      rate,
+      durationMs,
     });
   }
 
@@ -785,7 +1297,7 @@ export class LyricBarController {
       browserPlayerService: this.#currentSettings?.browserPlayerService ?? 'auto',
       hasAcceptedSyncedPosition: this.#lastAcceptedSyncPositionMs !== null,
       hasPreviousSyncedLine: this.#lastSyncedLine !== null,
-      trackDurationMs: lookup.track.durationMs,
+      trackDurationMs: player.durationMs ?? lookup.track.durationMs,
     };
     const trackKey = this.#buildSyncPositionTrackKey(player, lookup);
 
@@ -794,8 +1306,7 @@ export class LyricBarController {
       this.#syncPositionOffsetMs = null;
       this.#lastAcceptedSyncPositionMs = null;
       this.#syncPositionEstimate = null;
-      this.#lastSyncedLine = null;
-      this.#lastActiveWordIndex = -1;
+      this.#resetHighlightMemo();
     }
 
     if (this.#syncPositionOffsetMs !== null) {
@@ -899,12 +1410,34 @@ export class LyricBarController {
       return;
     }
 
-    const viewModel = buildIndicatorViewModel(this.#displayState, this.#currentSettings);
+    const viewModel = buildIndicatorViewModel(this.#visibleDisplayState(), this.#currentSettings);
     this.#logger?.debug('indicator-render', {
       text: viewModel.text,
       visible: viewModel.visible,
     });
     this.#indicator.render(viewModel);
+  }
+
+  /**
+   * Display state after the panel-visibility policy is applied.
+   *
+   * The lyrics bar is a music affordance: with no player playing or paused there
+   * is nothing to show, so the label is hidden rather than filled with a
+   * placeholder.
+   *
+   * @returns {DisplayState}
+   */
+  #visibleDisplayState() {
+    if (
+      shouldHideIndicator({
+        hideWhenIdle: this.#currentSettings?.hideWhenIdle === true,
+        player: this.#activePlayer,
+      })
+    ) {
+      return { kind: 'hidden' };
+    }
+
+    return this.#displayState;
   }
 
   /**
@@ -920,7 +1453,7 @@ export class LyricBarController {
     const player = this.#activePlayer;
     const lookup = this.#currentLookup;
     const syncedLookup = lookup !== null && lookup.kind === 'synced' ? lookup : null;
-    const positionMs = this.#lastKnownPositionMs;
+    const positionMs = this.#currentPositionMs();
 
     // The popup highlights by index, not by text: a repeated chorus otherwise
     // lights up every one of its occurrences and auto-scroll jumps to the first.
@@ -938,9 +1471,22 @@ export class LyricBarController {
       positionMs,
       durationMs: player?.durationMs ?? syncedLookup?.track.durationMs ?? null,
       trackId: player?.trackId ?? null,
+      canSeek: this.#activePlayerCanSeek(),
+      seekStepMs: SEEK_STEP_MS,
       lyrics: syncedLookup,
       activeLineIndex,
     });
+  }
+
+  /**
+   * @returns {boolean}
+   */
+  #activePlayerCanSeek() {
+    const player = this.#activePlayer;
+    if (player === null) {
+      return false;
+    }
+    return this.#proxies.get(player.busName)?.proxy.canSeek !== false;
   }
 }
 

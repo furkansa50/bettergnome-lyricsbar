@@ -11,6 +11,7 @@ import { applyPropertyChanges, mapMprisProperties, snapshotsEqual } from './play
  *
  * @typedef {(snapshot: PlayerSnapshot | null) => void} PlayerSnapshotCallback
  * @typedef {(positionMs: number | null) => void} PlayerPositionCallback
+ * @typedef {(positionMs: number) => void} PlayerSeekedCallback
  */
 
 const PLAYER_IFACE = 'org.mpris.MediaPlayer2.Player';
@@ -45,11 +46,31 @@ export class PlayerProxy {
   /** @type {number} */
   #propertiesSignalId = 0;
 
+  /** @type {number} */
+  #dbusSignalId = 0;
+
+  /**
+   * Latest `CanSeek`, or null while unknown.
+   *
+   * Kept off {@link PlayerSnapshot} deliberately: it is a capability, not part
+   * of the displayed track identity, and adding it to the snapshot would change
+   * the equality contract every stability decision is built on.
+   *
+   * @type {boolean | null}
+   */
+  #canSeek = null;
+
+  /** @type {number} */
+  #rate = 1;
+
   /** @type {PlayerSnapshot | null} */
   #snapshot = null;
 
   /** @type {Set<PlayerSnapshotCallback>} */
   #listeners = new Set();
+
+  /** @type {Set<PlayerSeekedCallback>} */
+  #seekedListeners = new Set();
 
   /**
    * @param {any} connection
@@ -76,6 +97,28 @@ export class PlayerProxy {
    */
   get busName() {
     return this.#busName;
+  }
+
+  /**
+   * Whether the player advertises seek support.
+   *
+   * Unknown is reported as seekable: several players never publish `CanSeek`,
+   * and refusing to seek those would break a working control. Only an explicit
+   * `false` disables the seek affordances.
+   *
+   * @returns {boolean}
+   */
+  get canSeek() {
+    return this.#canSeek !== false;
+  }
+
+  /**
+   * Latest MPRIS `Rate`, defaulting to normal speed.
+   *
+   * @returns {number}
+   */
+  get rate() {
+    return this.#rate;
   }
 
   /**
@@ -247,6 +290,43 @@ export class PlayerProxy {
   }
 
   /**
+   * Seek relative to the current position.
+   *
+   * This is the MPRIS call that rewind and fast-forward should use. Unlike
+   * `SetPosition` it needs no track id, and players that only implement one of
+   * the two seek methods almost always implement this one. Negative offsets
+   * rewind; MPRIS requires the player to clamp at the track boundaries.
+   *
+   * @param {number} offsetMs Signed offset in milliseconds.
+   * @returns {void}
+   */
+  seek(offsetMs) {
+    if (typeof offsetMs !== 'number' || !Number.isFinite(offsetMs) || offsetMs === 0) {
+      return;
+    }
+
+    const offsetUs = Math.round(offsetMs * 1000);
+    this.#callPlayerMethodWithArgs('Seek', new GLib.Variant('(x)', [offsetUs]));
+  }
+
+  /**
+   * Subscribe to the MPRIS `Seeked` signal.
+   *
+   * Players emit this after any jump, including ones triggered from their own
+   * UI or from a media key. Without it the lyric line stays on the pre-seek
+   * position until the next poll.
+   *
+   * @param {PlayerSeekedCallback} callback
+   * @returns {void}
+   */
+  onSeeked(callback) {
+    this.#seekedListeners.add(callback);
+    this.#lifecycle.add(() => {
+      this.#seekedListeners.delete(callback);
+    });
+  }
+
+  /**
    * Invoke a parameter-less MPRIS Player method (PlayPause, Next, Previous).
    *
    * These are fire-and-forget: errors (e.g. player missing the method) are
@@ -315,6 +395,7 @@ export class PlayerProxy {
    */
   #bindProxy(proxy) {
     const initial = readCachedProperties(proxy);
+    this.#applyCapabilities(initial);
     const snapshot = mapMprisProperties(this.#busName, initial);
     this.#updateSnapshot(snapshot);
     this.#refreshAllProperties();
@@ -334,9 +415,56 @@ export class PlayerProxy {
         if (changes === null) {
           return;
         }
+        this.#applyCapabilities(changes);
         this.#applyChanges(changes);
       },
     );
+
+    this.#dbusSignalId = proxy.connect(
+      'g-signal',
+      /**
+       * @param {unknown} _proxy
+       * @param {unknown} _senderName
+       * @param {unknown} signalName
+       * @param {unknown} parameters
+       * @returns {void}
+       */
+      (_proxy, _senderName, signalName, parameters) => {
+        if (!this.#enabled || this.#gone || signalName !== 'Seeked') {
+          return;
+        }
+        const positionMs = readSeekedPosition(parameters);
+        if (positionMs === null) {
+          return;
+        }
+        this.#logger?.debug('player-seeked', { busName: this.#busName, positionMs });
+        for (const listener of [...this.#seekedListeners]) {
+          listener(positionMs);
+        }
+      },
+    );
+  }
+
+  /**
+   * Track the capability properties that never belong to the track snapshot.
+   *
+   * @param {{ [key: string]: unknown }} properties
+   * @returns {void}
+   */
+  #applyCapabilities(properties) {
+    if (Object.hasOwn(properties, 'CanSeek')) {
+      const value = unpackVariantValue(Reflect.get(properties, 'CanSeek'));
+      if (typeof value === 'boolean') {
+        this.#canSeek = value;
+      }
+    }
+
+    if (Object.hasOwn(properties, 'Rate')) {
+      const value = unpackVariantValue(Reflect.get(properties, 'Rate'));
+      if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+        this.#rate = value;
+      }
+    }
   }
 
   /**
@@ -394,6 +522,7 @@ export class PlayerProxy {
         if (properties === null) {
           return;
         }
+        this.#applyCapabilities(properties);
         const next = mapMprisProperties(this.#busName, properties);
         this.#updateSnapshot(next);
       },
@@ -435,16 +564,20 @@ export class PlayerProxy {
    * @returns {void}
    */
   #disconnectPropertiesSignal() {
-    if (this.#proxy && this.#propertiesSignalId !== 0) {
+    for (const signalId of [this.#propertiesSignalId, this.#dbusSignalId]) {
+      if (!this.#proxy || signalId === 0) {
+        continue;
+      }
       try {
-        if (isSignalHandlerConnected(this.#proxy, this.#propertiesSignalId)) {
-          this.#proxy.disconnect(this.#propertiesSignalId);
+        if (isSignalHandlerConnected(this.#proxy, signalId)) {
+          this.#proxy.disconnect(signalId);
         }
       } catch {
         // proxy already gone, nothing to clean up
       }
-      this.#propertiesSignalId = 0;
     }
+    this.#propertiesSignalId = 0;
+    this.#dbusSignalId = 0;
   }
 }
 
@@ -543,6 +676,22 @@ function readPositionReply(variant) {
   }
 
   const positionUs = unpackVariantValue(unpacked[0]);
+  if (typeof positionUs !== 'number' || !Number.isFinite(positionUs) || positionUs < 0) {
+    return null;
+  }
+
+  return Math.round(positionUs / 1000);
+}
+
+/**
+ * Read the microsecond position carried by an MPRIS `Seeked` signal.
+ *
+ * @param {unknown} parameters `(x)` tuple emitted with the signal.
+ * @returns {number | null}
+ */
+function readSeekedPosition(parameters) {
+  const unpacked = unpackVariantValue(parameters);
+  const positionUs = Array.isArray(unpacked) ? unpackVariantValue(unpacked[0]) : unpacked;
   if (typeof positionUs !== 'number' || !Number.isFinite(positionUs) || positionUs < 0) {
     return null;
   }

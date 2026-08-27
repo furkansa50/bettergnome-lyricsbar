@@ -13,16 +13,21 @@ import { snapshotsEqual } from './player-mapping.js';
  *
  * @typedef {(snapshot: PlayerSnapshot | null) => void} PlayerSnapshotCallback
  * @typedef {(positionMs: number | null) => void} PlayerPositionCallback
+ * @typedef {(positionMs: number) => void} PlayerSeekedCallback
  *
  * @typedef {Readonly<{
  *   busName: string,
+ *   canSeek?: boolean,
+ *   rate?: number,
  *   snapshot(): PlayerSnapshot | null,
  *   onSnapshot(callback: PlayerSnapshotCallback): void,
+ *   onSeeked?: (callback: PlayerSeekedCallback) => void,
  *   readPosition(callback: PlayerPositionCallback): void,
  *   refreshProperties(): void,
  *   playPause(): void,
  *   next(): void,
  *   previous(): void,
+ *   seek?: (offsetMs: number) => void,
  *   setPosition(trackId: string | null, positionMs: number): void,
  *   start(): void,
  * }>} RawPlayerProxy
@@ -96,6 +101,21 @@ export class StablePlayerProxy {
    */
   get busName() {
     return this.#rawProxy.busName;
+  }
+
+  /**
+   * @returns {boolean}
+   */
+  get canSeek() {
+    return this.#rawProxy.canSeek !== false;
+  }
+
+  /**
+   * @returns {number}
+   */
+  get rate() {
+    const { rate } = this.#rawProxy;
+    return typeof rate === 'number' && Number.isFinite(rate) && rate > 0 ? rate : 1;
   }
 
   /**
@@ -183,6 +203,26 @@ export class StablePlayerProxy {
    */
   setPosition(trackId, positionMs) {
     this.#rawProxy.setPosition?.(trackId, positionMs);
+  }
+
+  /**
+   * Seek relative to the current position on the active player.
+   *
+   * @param {number} offsetMs Signed offset in milliseconds.
+   * @returns {void}
+   */
+  seek(offsetMs) {
+    this.#rawProxy.seek?.(offsetMs);
+  }
+
+  /**
+   * Subscribe to the player's `Seeked` signal.
+   *
+   * @param {PlayerSeekedCallback} callback
+   * @returns {void}
+   */
+  onSeeked(callback) {
+    this.#rawProxy.onSeeked?.(callback);
   }
 
   /**

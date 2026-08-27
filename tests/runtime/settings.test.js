@@ -18,6 +18,7 @@ describe('SettingsAdapter', () => {
       textAlign: 'right',
       fallbackMode: 'track',
       showSettingsIcon: true,
+      hideWhenIdle: false,
       playerPriority: ['spotify'],
       browserPlayerService: 'auto',
       lyricsSource: 'auto',
@@ -39,16 +40,16 @@ describe('SettingsAdapter', () => {
 
     adapter.subscribe(callback);
 
-    expect(backend.connect).toHaveBeenCalledTimes(15);
+    expect(backend.connect).toHaveBeenCalledTimes(16);
     backend.emit('changed::max-width');
 
     expect(callback).toHaveBeenCalledWith(adapter.read());
 
     lifecycle.dispose();
 
-    expect(backend.disconnect).toHaveBeenCalledTimes(15);
-    expect(backend.disconnect).toHaveBeenNthCalledWith(1, 15);
-    expect(backend.disconnect).toHaveBeenNthCalledWith(15, 1);
+    expect(backend.disconnect).toHaveBeenCalledTimes(16);
+    expect(backend.disconnect).toHaveBeenNthCalledWith(1, 16);
+    expect(backend.disconnect).toHaveBeenNthCalledWith(16, 1);
   });
 });
 

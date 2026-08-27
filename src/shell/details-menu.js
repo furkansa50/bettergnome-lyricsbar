@@ -27,6 +27,8 @@ import { _t } from '../runtime/i18n.js';
  *   positionMs: number | null,
  *   durationMs: number | null,
  *   trackId: string | null,
+ *   canSeek?: boolean,
+ *   seekStepMs?: number,
  *   lyrics: SyncedLyrics | null,
  *   activeLineIndex: number,
  * }>} DetailsMenuState
@@ -36,12 +38,16 @@ import { _t } from '../runtime/i18n.js';
  *   onNext: () => void,
  *   onPrevious: () => void,
  *   onSeek: (positionMs: number) => void,
+ *   onSeekBy: (offsetMs: number) => void,
  * }>} DetailsMenuActions
  */
 
 const FALLBACK_ICON_NAME = 'audio-x-generic-symbolic';
 const ALBUM_ART_SIZE = 120;
 const LYRICS_SCROLL_HEIGHT = 200;
+
+/** Fallback rewind / fast-forward step when the controller does not supply one. */
+const DEFAULT_SEEK_STEP_MS = 10_000;
 
 /** Fallback row height used before the lyric labels have been allocated. */
 const ESTIMATED_LINE_HEIGHT = 20;
@@ -142,10 +148,22 @@ export function buildDetailsMenu(menu, actions) {
     child: new St.Icon({ icon_name: 'media-skip-backward-symbolic', icon_size: 20 }),
     accessible_name: _t('Previous', 'Önceki'),
   });
+  // Rewind and fast-forward are distinct from previous/next: they seek inside the
+  // current track through relative MPRIS Seek rather than changing tracks.
+  const rewindButton = new St.Button({
+    style_class: 'lyricbar-details-button',
+    child: new St.Icon({ icon_name: 'media-seek-backward-symbolic', icon_size: 20 }),
+    accessible_name: _t('Rewind', 'Geri sar'),
+  });
   const playPauseButton = new St.Button({
     style_class: 'lyricbar-details-button',
     child: new St.Icon({ icon_name: 'media-playback-start-symbolic', icon_size: 24 }),
     accessible_name: _t('Play', 'Oynat'),
+  });
+  const forwardButton = new St.Button({
+    style_class: 'lyricbar-details-button',
+    child: new St.Icon({ icon_name: 'media-seek-forward-symbolic', icon_size: 20 }),
+    accessible_name: _t('Fast forward', 'İleri sar'),
   });
   const nextButton = new St.Button({
     style_class: 'lyricbar-details-button',
@@ -154,7 +172,9 @@ export function buildDetailsMenu(menu, actions) {
   });
 
   controlsBox.add_child(prevButton);
+  controlsBox.add_child(rewindButton);
   controlsBox.add_child(playPauseButton);
+  controlsBox.add_child(forwardButton);
   controlsBox.add_child(nextButton);
 
   const controlsItem = new PopupMenu.PopupBaseMenuItem({ reactive: false, can_focus: false });
@@ -209,9 +229,17 @@ export function buildDetailsMenu(menu, actions) {
    */
   let seekDurationMs = null;
 
+  /** Whether the active player advertises seek support. */
+  let seekEnabled = true;
+
+  /** Step applied by the rewind and fast-forward buttons. */
+  let seekStepMs = DEFAULT_SEEK_STEP_MS;
+
   const prevClickedId = prevButton.connect('clicked', () => actions.onPrevious());
   const playPauseClickedId = playPauseButton.connect('clicked', () => actions.onPlayPause());
   const nextClickedId = nextButton.connect('clicked', () => actions.onNext());
+  const rewindClickedId = rewindButton.connect('clicked', () => actions.onSeekBy(-seekStepMs));
+  const forwardClickedId = forwardButton.connect('clicked', () => actions.onSeekBy(seekStepMs));
 
   // St CSS has no percentage units, so the fill width is recomputed in pixels
   // from the bar's allocation every time that allocation changes.
@@ -227,6 +255,10 @@ export function buildDetailsMenu(menu, actions) {
      * @returns {unknown}
      */
     (actor, event) => {
+      if (!seekEnabled) {
+        return Clutter.EVENT_PROPAGATE;
+      }
+
       const fraction = readPressFraction(actor, event);
       if (fraction === null) {
         return Clutter.EVENT_PROPAGATE;
@@ -303,6 +335,19 @@ export function buildDetailsMenu(menu, actions) {
       setLabelText(durationLabel, formatTrackTime(state.durationMs));
 
       seekDurationMs = state.durationMs;
+      seekEnabled = state.canSeek !== false;
+      seekStepMs =
+        typeof state.seekStepMs === 'number' &&
+        Number.isFinite(state.seekStepMs) &&
+        state.seekStepMs > 0
+          ? state.seekStepMs
+          : DEFAULT_SEEK_STEP_MS;
+
+      // A player that cannot seek keeps its buttons visible but inert, so the
+      // popup layout does not reflow when a track changes seekability.
+      setReactive(rewindButton, seekEnabled);
+      setReactive(forwardButton, seekEnabled);
+
       progressFraction = computeProgressFraction(state.positionMs, state.durationMs);
       applyProgressFill(progressBar, progressFill, progressFraction);
 
@@ -324,6 +369,8 @@ export function buildDetailsMenu(menu, actions) {
       disconnectSafely(prevButton, prevClickedId);
       disconnectSafely(playPauseButton, playPauseClickedId);
       disconnectSafely(nextButton, nextClickedId);
+      disconnectSafely(rewindButton, rewindClickedId);
+      disconnectSafely(forwardButton, forwardClickedId);
       disconnectSafely(progressBar, progressWidthId);
       disconnectSafely(progressBar, progressPressId);
       disconnectSafely(lyricsBox, lyricsHeightId);
@@ -762,4 +809,28 @@ function setIconName(icon, name) {
   } catch {
     Reflect.set(icon, 'icon_name', name);
   }
+}
+
+/**
+ * Enable or disable a control without removing it from the layout.
+ *
+ * The dimmed style class is applied alongside reactivity so an inert button is
+ * visibly inert rather than silently ignoring clicks.
+ *
+ * @param {any} button
+ * @param {boolean} enabled
+ * @returns {void}
+ */
+function setReactive(button, enabled) {
+  try {
+    button.reactive = enabled;
+  } catch {
+    Reflect.set(button, 'reactive', enabled);
+  }
+
+  if (enabled) {
+    removeStyleClass(button, 'lyricbar-details-button-insensitive');
+    return;
+  }
+  addStyleClass(button, 'lyricbar-details-button-insensitive');
 }

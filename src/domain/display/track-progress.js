@@ -69,6 +69,36 @@ export function computeSeekPositionMs(fraction, durationMs) {
 }
 
 /**
+ * Translates a display-space seek position into player-space for `SetPosition`.
+ *
+ * When an offset is active (e.g. Apple Music Web cumulative position), the
+ * player's internal coordinate frame is `display + offset`.
+ *
+ * @param {number | null | undefined} displayPositionMs
+ * @param {number | null | undefined} syncPositionOffsetMs
+ * @returns {number}
+ */
+export function computeTargetSetPositionMs(displayPositionMs, syncPositionOffsetMs) {
+  if (
+    typeof displayPositionMs !== 'number' ||
+    !Number.isFinite(displayPositionMs) ||
+    displayPositionMs < 0
+  ) {
+    return 0;
+  }
+
+  if (
+    typeof syncPositionOffsetMs === 'number' &&
+    Number.isFinite(syncPositionOffsetMs) &&
+    syncPositionOffsetMs > 0
+  ) {
+    return displayPositionMs + syncPositionOffsetMs;
+  }
+
+  return displayPositionMs;
+}
+
+/**
  * Fraction of the bar a pointer press landed on.
  *
  * @param {number} localX Pointer x relative to the bar's own origin.

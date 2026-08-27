@@ -27,6 +27,11 @@
       <summary>Fallback mode</summary>
       <description>Display behavior when synced lyrics are unavailable.</description>
     </key>
+    <key name="hide-when-idle" type="b">
+      <default>true</default>
+      <summary>Hide when no player is active</summary>
+      <description>Hide the top-bar lyric label unless a music player is currently playing or paused.</description>
+    </key>
     <key name="show-settings-icon" type="b">
       <default>true</default>
       <summary>Show settings icon</summary>

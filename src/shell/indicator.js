@@ -24,6 +24,26 @@ class LyricBarIndicatorBase extends PanelMenu.Button {
     this._detailsActions = null;
     this._menuBound = false;
 
+    /**
+     * Last applied visual properties.
+     *
+     * The word-highlight tick renders many times per second, so re-applying an
+     * unchanged style string or re-queuing a relayout on every render is both
+     * wasted work and a visible source of jitter: a panel label that is
+     * re-measured constantly shifts its neighbours around.
+     *
+     * @type {{ text: string | null, style: string | null, width: number | null,
+     *   ellipsize: number | null, align: string | null, visible: boolean | null } | null}
+     */
+    this._applied = {
+      text: null,
+      style: null,
+      width: null,
+      ellipsize: null,
+      align: null,
+      visible: null,
+    };
+
     this._lyricBarBox = new St.BoxLayout({
       style_class: 'panel-status-indicators-box lyricbar-container',
     });
@@ -52,23 +72,58 @@ class LyricBarIndicatorBase extends PanelMenu.Button {
       return;
     }
 
-    setActorVisible(this, viewModel.visible);
-    setLabelText(this._lyricBarLabel, viewModel.text);
+    const applied = this._applied;
+    if (!applied) {
+      return;
+    }
 
-    if (viewModel.autoWidth) {
-      // Allow label to expand naturally up to maxWidth (via CSS max-width)
-      setActorWidth(this._lyricBarLabel, -1);
-      // Pango.EllipsizeMode.NONE = 0
-      setEllipsizeMode(this._lyricBarLabel, 0);
-    } else {
-      setActorWidth(this._lyricBarLabel, viewModel.maxWidth);
-      // Pango.EllipsizeMode.END = 3
-      setEllipsizeMode(this._lyricBarLabel, 3);
+    if (applied.visible !== viewModel.visible) {
+      applied.visible = viewModel.visible;
+      setActorVisible(this, viewModel.visible);
+    }
+
+    const textChanged = applied.text !== viewModel.text;
+    if (textChanged) {
+      applied.text = viewModel.text;
+      setLabelText(this._lyricBarLabel, viewModel.text);
+    }
+
+    // Pango.EllipsizeMode: 0=NONE, 3=END. Auto width lets the label grow up to
+    // the CSS max-width instead of being pinned and ellipsized.
+    const width = viewModel.autoWidth ? -1 : viewModel.maxWidth;
+    const ellipsize = viewModel.autoWidth ? 0 : 3;
+    let geometryChanged = false;
+
+    if (applied.width !== width) {
+      applied.width = width;
+      geometryChanged = true;
+      setActorWidth(this._lyricBarLabel, width);
+    }
+
+    if (applied.ellipsize !== ellipsize) {
+      applied.ellipsize = ellipsize;
+      geometryChanged = true;
+      setEllipsizeMode(this._lyricBarLabel, ellipsize);
     }
 
     const style = buildLabelStyleString(viewModel);
-    setActorStyle(this._lyricBarLabel, style);
-    setLabelAlignment(this._lyricBarLabel, viewModel.textAlign);
+    if (applied.style !== style) {
+      applied.style = style;
+      geometryChanged = true;
+      setActorStyle(this._lyricBarLabel, style);
+    }
+
+    if (applied.align !== viewModel.textAlign) {
+      applied.align = viewModel.textAlign;
+      geometryChanged = true;
+      setLabelAlignment(this._lyricBarLabel, viewModel.textAlign);
+    }
+
+    // Text-only changes are handled by the label's own relayout. Walking the
+    // ancestor chain is only needed when geometry inputs actually change.
+    if (!geometryChanged) {
+      return;
+    }
 
     queueRelayout(this._lyricBarLabel);
     queueRelayout(this._lyricBarBin);
@@ -107,6 +162,7 @@ class LyricBarIndicatorBase extends PanelMenu.Button {
     this._detailsMenu?.destroy();
     this._detailsMenu = null;
     this._detailsActions = null;
+    this._applied = null;
     this._lyricBarLabel = null;
     this._lyricBarBin = null;
     this._lyricBarBox = null;

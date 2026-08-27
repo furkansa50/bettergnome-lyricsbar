@@ -101,6 +101,19 @@
   background-color: rgba(255, 255, 255, 0.2);
 }
 
+/*
+ * Applied when the active player reports CanSeek=false. The button keeps its
+ * place in the row so the popup layout does not reflow between tracks.
+ */
+.lyricbar-details-button-insensitive {
+  opacity: 0.35;
+}
+
+.lyricbar-details-button-insensitive:hover,
+.lyricbar-details-button-insensitive:active {
+  background-color: transparent;
+}
+
 .lyricbar-details-lyrics-scroll {
   min-width: 280px;
 }

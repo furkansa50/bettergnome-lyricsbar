@@ -69,15 +69,50 @@ export function selectLyricLineIndex(lines, positionMs) {
     return -1;
   }
 
-  let current = -1;
-  for (const [index, line] of lines.entries()) {
-    if (line.timeMs > positionMs) {
-      break;
+  return lastIndexAtOrBefore(lines, positionMs, readLineTimeMs);
+}
+
+/**
+ * Index of the last entry whose start time is at or before `positionMs`, or -1.
+ *
+ * Entries must be sorted ascending by start time, which every producer here
+ * guarantees. Binary search keeps the cost independent of song length: this runs
+ * on the word-highlight tick, far more often than once per lyric line. With
+ * several entries sharing a start time the last of them wins, matching the
+ * "latest applicable line" rule callers rely on.
+ *
+ * @template T
+ * @param {readonly T[]} entries
+ * @param {number} positionMs
+ * @param {(entry: T) => number | undefined} readStartMs
+ * @returns {number}
+ */
+export function lastIndexAtOrBefore(entries, positionMs, readStartMs) {
+  let low = 0;
+  let high = entries.length - 1;
+  let found = -1;
+
+  while (low <= high) {
+    const middle = (low + high) >> 1;
+    const entry = entries[middle];
+    const startMs = entry === undefined ? undefined : readStartMs(entry);
+    if (typeof startMs !== 'number' || startMs > positionMs) {
+      high = middle - 1;
+      continue;
     }
-    current = index;
+    found = middle;
+    low = middle + 1;
   }
 
-  return current;
+  return found;
+}
+
+/**
+ * @param {LyricLine} line
+ * @returns {number}
+ */
+function readLineTimeMs(line) {
+  return line.timeMs;
 }
 
 /**

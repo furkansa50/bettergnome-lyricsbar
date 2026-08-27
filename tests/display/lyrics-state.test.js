@@ -200,6 +200,49 @@ describe('displayStateFromLookup', () => {
       track: { title: 'Yellow', artist: 'Coldplay' },
     });
   });
+
+  it('paints the line at a known position instead of the first line of the song', () => {
+    // Painting lines[0] for a track already in progress is the "lyrics show up
+    // late" symptom: the correct line only arrived on the next poll tick.
+    expect(displayStateFromLookup(snapshot({}), syncedLookup, { positionMs: 5000 })).toEqual({
+      kind: 'lyrics',
+      line: 'Look how they shine for you',
+      words: [],
+      activeWordIndex: -1,
+      track: { title: 'Yellow', artist: 'Coldplay' },
+    });
+  });
+
+  it('prefers a known position over a reusable previous state', () => {
+    expect(
+      displayStateFromLookup(snapshot({}), syncedLookup, {
+        positionMs: 5000,
+        previousState: {
+          kind: 'lyrics',
+          line: 'Look at the stars',
+          words: [],
+          activeWordIndex: -1,
+          track: { title: 'Yellow', artist: 'Coldplay' },
+        },
+      }),
+    ).toEqual({
+      kind: 'lyrics',
+      line: 'Look how they shine for you',
+      words: [],
+      activeWordIndex: -1,
+      track: { title: 'Yellow', artist: 'Coldplay' },
+    });
+  });
+
+  it('still falls back to the first line when no position is known', () => {
+    expect(displayStateFromLookup(snapshot({}), syncedLookup, { positionMs: null })).toEqual({
+      kind: 'lyrics',
+      line: 'Look at the stars',
+      words: [],
+      activeWordIndex: -1,
+      track: { title: 'Yellow', artist: 'Coldplay' },
+    });
+  });
 });
 
 describe('displayStateFromSyncedPosition', () => {
@@ -284,13 +327,17 @@ describe('displayStateFromSyncedPosition', () => {
       track: { title: 'Yellow', artist: 'Coldplay' },
     });
 
-    // Position is after the endMs of the line (4000) but before the next line (4500)
-    // It should fall back to plain lyrics behavior for this line because the word timing active period is over.
+    // Position is after the line's endMs (4000) but before the next line (4500).
+    // The word line stays selected so the label keeps rendering the same word
+    // markup: dropping it here made the panel swap between word markup and the
+    // plain line inside a single lyric line, which is visible as flicker. The
+    // pointer moves past the last word so no word stays stuck in the active
+    // style during the gap.
     expect(displayStateFromSyncedPosition(snapshot({}), wordTimedLookup, 4200)).toEqual({
       kind: 'lyrics',
       line: 'Look at the stars',
-      words: [],
-      activeWordIndex: -1,
+      words: wordTimedLookup.wordLines[0]?.words,
+      activeWordIndex: 4,
       track: { title: 'Yellow', artist: 'Coldplay' },
     });
   });

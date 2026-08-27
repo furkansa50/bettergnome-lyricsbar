@@ -81,6 +81,7 @@ function settings(playerPriority, overrides = {}) {
     textAlign: 'left',
     fallbackMode: 'track',
     showSettingsIcon: true,
+    hideWhenIdle: false,
     playerPriority,
     browserPlayerService: 'spotify',
     lyricsSource: 'auto',

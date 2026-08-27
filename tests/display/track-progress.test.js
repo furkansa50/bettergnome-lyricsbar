@@ -5,6 +5,7 @@ import {
   computeProgressFraction,
   computeScrollValue,
   computeSeekPositionMs,
+  computeTargetSetPositionMs,
   formatTrackTime,
 } from '../../src/domain/display/track-progress.js';
 
@@ -57,6 +58,25 @@ describe('computeSeekPositionMs', () => {
     expect(computeSeekPositionMs(0.5, null)).toBeNull();
     expect(computeSeekPositionMs(0.5, 0)).toBeNull();
     expect(computeSeekPositionMs(Number.NaN, 200_000)).toBeNull();
+  });
+});
+
+describe('computeTargetSetPositionMs', () => {
+  it('returns unchanged display position when no offset is active', () => {
+    expect(computeTargetSetPositionMs(30_000, null)).toBe(30_000);
+    expect(computeTargetSetPositionMs(30_000, undefined)).toBe(30_000);
+    expect(computeTargetSetPositionMs(30_000, 0)).toBe(30_000);
+  });
+
+  it('adds the cumulative offset to display position for players in cumulative space', () => {
+    expect(computeTargetSetPositionMs(30_000, 466_574)).toBe(496_574);
+    expect(computeTargetSetPositionMs(0, 500_000)).toBe(500_000);
+  });
+
+  it('handles invalid display position safely', () => {
+    expect(computeTargetSetPositionMs(-10, 466_574)).toBe(0);
+    expect(computeTargetSetPositionMs(null, 466_574)).toBe(0);
+    expect(computeTargetSetPositionMs(Number.NaN, 466_574)).toBe(0);
   });
 });
 

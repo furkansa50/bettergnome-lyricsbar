@@ -79,4 +79,45 @@ describe('selectLyricLineIndex', () => {
     expect(index).toBe(1);
     expect(lines[index]).toEqual(selectLyricLine(lines, 2500));
   });
+
+  it('selects the last of several lines sharing one timestamp', () => {
+    // Binary search must keep the linear scan's tie-breaking: a repeated
+    // timestamp resolves to the latest applicable line, not the first.
+    const lines = parseLrc('[00:01.00]A\n[00:02.00]B\n[00:02.00]C\n[00:03.00]D');
+
+    expect(selectLyricLineIndex(lines, 2000)).toBe(2);
+    expect(selectLyricLineIndex(lines, 2500)).toBe(2);
+  });
+
+  it('matches a reference scan across every boundary', () => {
+    const lines = parseLrc(
+      '[00:01.00]A\n[00:02.50]B\n[00:02.50]C\n[00:04.00]D\n[00:09.99]E\n[01:00.00]F',
+    );
+
+    /** @param {number} positionMs */
+    const referenceIndex = (positionMs) => {
+      let current = -1;
+      for (const [index, line] of lines.entries()) {
+        if (line.timeMs > positionMs) {
+          break;
+        }
+        current = index;
+      }
+      return current;
+    };
+
+    for (const line of lines) {
+      for (const offset of [-1, 0, 1]) {
+        const positionMs = line.timeMs + offset;
+        if (positionMs < 0) {
+          continue;
+        }
+        expect(selectLyricLineIndex(lines, positionMs)).toBe(referenceIndex(positionMs));
+      }
+    }
+
+    for (const positionMs of [0, 999, 1000, 3000, 60_000, 120_000]) {
+      expect(selectLyricLineIndex(lines, positionMs)).toBe(referenceIndex(positionMs));
+    }
+  });
 });

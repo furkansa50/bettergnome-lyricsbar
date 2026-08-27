@@ -58,7 +58,18 @@ export async function dirExists(path) {
  */
 export async function listFiles(rootPath, options = {}) {
   const rootAbs = repoPath(rootPath);
-  const ignoredDirs = new Set(options.ignoredDirs ?? ['.git', 'node_modules', 'dist', 'coverage']);
+  const ignoredDirs = new Set(
+    options.ignoredDirs ?? [
+      '.git',
+      '.kilo',
+      '.claude',
+      '.tmp',
+      '.zcode',
+      'node_modules',
+      'dist',
+      'coverage',
+    ],
+  );
   /** @type {string[]} */
   const files = [];
 

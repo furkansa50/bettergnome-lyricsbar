@@ -28,7 +28,7 @@ export function shouldUseSyncedLyricsTiming(player, options = {}) {
     browserPlayerService: options.browserPlayerService ?? 'auto',
   });
 
-  return profile.id !== '';
+  return Boolean(profile?.id);
 }
 
 /**
@@ -71,18 +71,13 @@ export function shouldHoldLowConfidenceSyncedPosition(player, positionMs, option
     player === undefined ||
     positionMs !== 0 ||
     (options.hasPreviousSyncedLine !== true && options.hasAcceptedSyncedPosition !== true) ||
-    player.durationMs !== null ||
     player.playbackStatus !== 'Playing' ||
     !isFirefoxBrowser(player.busName)
   ) {
     return false;
   }
 
-  const profile = detectPlayerProfile(player, {
-    browserPlayerService: options.browserPlayerService ?? 'auto',
-  });
-
-  return profile.id === 'youtube-music-web';
+  return true;
 }
 
 /**

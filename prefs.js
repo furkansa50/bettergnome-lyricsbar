@@ -210,11 +210,21 @@ export default class LyricBarPreferences extends ExtensionPreferences {
       Gio.SettingsBindFlags.DEFAULT,
     );
 
+    const hideWhenIdleRow = new Adw.SwitchRow({
+      title: _t('Hide when no player is active', 'Oynatıcı etkin değilken gizle'),
+      subtitle: _t(
+        'Show the lyric label only while a music player is playing or paused.',
+        'Şarkı sözü etiketini yalnızca bir müzik oynatıcı çalarken veya duraklatılmışken göster.',
+      ),
+    });
+    settings.bind('hide-when-idle', hideWhenIdleRow, 'active', Gio.SettingsBindFlags.DEFAULT);
+
     displayGroup.add(panelPositionRow);
     displayGroup.add(maxWidthRow);
     displayGroup.add(autoWidthRow);
     displayGroup.add(textAlignRow);
     displayGroup.add(fallbackModeRow);
+    displayGroup.add(hideWhenIdleRow);
     displayGroup.add(showSettingsIconRow);
 
     // 1.5 Appearance Group
@@ -885,6 +895,7 @@ function buildDiagnosticsMarkdown(metadata, settings) {
     `| Text alignment | ${escapeMarkdownTable(settings.get_string('text-align'))} |`,
     `| Maximum width | ${settings.get_int('max-width')} |`,
     `| Fallback mode | ${escapeMarkdownTable(settings.get_string('fallback-mode'))} |`,
+    `| Hide when idle | ${formatBoolean(settings.get_boolean('hide-when-idle'))} |`,
     `| Show settings icon | ${formatBoolean(settings.get_boolean('show-settings-icon'))} |`,
     `| Player priority | ${escapeMarkdownTable(settings.get_strv('player-priority').join(', '))} |`,
     `| Browser player service | ${escapeMarkdownTable(settings.get_string('browser-player-service'))} |`,

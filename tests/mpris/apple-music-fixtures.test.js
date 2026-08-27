@@ -6,6 +6,7 @@ import {
   shouldUseSyncedLyricsPosition,
   shouldUseSyncedLyricsTiming,
 } from '../../src/domain/display/sync-position-policy.js';
+import { computeTargetSetPositionMs } from '../../src/domain/display/track-progress.js';
 import { shouldWriteLyricsCache } from '../../src/domain/lyrics/cache-policy.js';
 import { buildTrackIdentityKey } from '../../src/domain/lyrics/track-identity.js';
 import { detectPlayerProfile, PLAYER_PROFILES } from '../../src/domain/mpris/profile.js';
@@ -191,6 +192,14 @@ describe('Apple Music browser MPRIS fixtures', () => {
         trackDurationMs: 180000,
       }),
     ).toBe(true);
+  });
+
+  it('translates display seek position to cumulative player space when an offset is active', () => {
+    const initialRawOffset = bogusDuration.positionSamplesMs[0] ?? 0;
+    const displaySeekTargetMs = 45_000;
+    const playerTargetMs = computeTargetSetPositionMs(displaySeekTargetMs, initialRawOffset);
+
+    expect(playerTargetMs).toBe(displaySeekTargetMs + initialRawOffset);
   });
 });
 

@@ -16,6 +16,7 @@ const DEFAULT_BROWSER_PLAYER_SERVICE = 'auto';
 const DEFAULT_LYRICS_SOURCE = 'auto';
 const DEFAULT_TEXT_ALIGN = 'left';
 const DEFAULT_AUTO_WIDTH = false;
+const DEFAULT_HIDE_WHEN_IDLE = true;
 const DEFAULT_GLOW_STRENGTH = 1.0;
 const MIN_GLOW_STRENGTH = 0.0;
 const MAX_GLOW_STRENGTH = 2.0;
@@ -56,6 +57,7 @@ export function normalizeSettings(raw) {
     textAlign: normalizeTextAlign(raw.textAlign),
     fallbackMode: normalizeFallbackMode(raw.fallbackMode),
     showSettingsIcon: normalizeBoolean(raw.showSettingsIcon, true),
+    hideWhenIdle: normalizeBoolean(raw.hideWhenIdle, DEFAULT_HIDE_WHEN_IDLE),
     playerPriority: normalizePlayerPriority(raw.playerPriority),
     browserPlayerService: normalizeBrowserPlayerService(raw.browserPlayerService),
     lyricsSource: normalizeLyricsSource(raw.lyricsSource),

@@ -1,4 +1,4 @@
-import { selectLyricLine } from '../lyrics/lrc.js';
+import { lastIndexAtOrBefore, selectLyricLineIndex } from '../lyrics/lrc.js';
 
 /**
  * @import { PlayerSnapshot } from '../mpris/types.js'
@@ -7,7 +7,14 @@ import { selectLyricLine } from '../lyrics/lrc.js';
  *
  * @typedef {Readonly<{
  *   previousState?: DisplayState | null | undefined,
+ *   positionMs?: number | null | undefined,
  * }>} DisplayLookupOptions
+ *
+ * @typedef {Readonly<{
+ *   lineIndex: number,
+ *   wordLineIndex: number,
+ *   activeWordIndex: number,
+ * }>} SyncedHighlight
  */
 
 /**
@@ -30,6 +37,12 @@ export function displayStateFromLookup(player, lookup, options = {}) {
 
   switch (lookup.kind) {
     case 'synced':
+      // A known position must win over the first line of the song. Painting
+      // `lines[0]` while playback is already underway is the "lyrics show up
+      // late" symptom: the correct line only arrived on the next poll tick.
+      if (typeof options.positionMs === 'number' && Number.isFinite(options.positionMs)) {
+        return displayStateFromSyncedPosition(player, lookup, options.positionMs);
+      }
       if (
         options.previousState?.kind === 'lyrics' &&
         sameDisplayTrack(options.previousState.track, track)
@@ -101,17 +114,23 @@ export function displayStateFromSyncedPosition(player, lookup, positionMs) {
     }
   }
 
-  const line = selectLyricLine(lookup.lines, positionMs);
+  // One selection pass shared with selectSyncedHighlight, so the cheap
+  // change-detection callers do and the state built here can never disagree.
+  const highlight = selectSyncedHighlight(lookup, positionMs);
+  const line = highlight.lineIndex === -1 ? null : (lookup.lines[highlight.lineIndex] ?? null);
   if (line !== null && line.text.trim() !== '') {
-    // Find matching word-timed line for glow effect
-    const wordLine = findWordTimedLine(lookup.wordLines, positionMs);
-    if (wordLine !== null) {
-      const activeWordIndex = selectActiveWordIndex(wordLine, positionMs);
+    const wordLine =
+      highlight.wordLineIndex === -1 ? null : (lookup.wordLines[highlight.wordLineIndex] ?? null);
+    if (wordLine !== null && wordLine !== undefined) {
       return {
         kind: 'lyrics',
-        line: line.text,
+        // Use the word-timed line's own text so the rendered label is always the
+        // concatenation of the words being highlighted. Mixing it with the plain
+        // synced line makes the label swap between two spellings of the same
+        // line, which is visible as flicker in the panel.
+        line: wordLine.text,
         words: wordLine.words,
-        activeWordIndex,
+        activeWordIndex: highlight.activeWordIndex,
         track,
       };
     }
@@ -122,54 +141,112 @@ export function displayStateFromSyncedPosition(player, lookup, positionMs) {
 }
 
 /**
- * Find the word-timed line that covers the given position.
+ * Find the word-timed line that applies at the given position.
+ *
+ * The line stays selected until the next word-timed line starts rather than
+ * being dropped at its own `endMs`. Dropping it early makes the panel fall back
+ * to the plain synced line, so the label alternates between word markup and
+ * plain text within a single lyric line.
  *
  * @param {readonly WordTimedLyricLine[] | undefined} wordLines
  * @param {number} positionMs
  * @returns {WordTimedLyricLine | null}
  */
-function findWordTimedLine(wordLines, positionMs) {
-  if (!wordLines || wordLines.length === 0) {
-    return null;
-  }
-
-  let current = null;
-  for (const wl of wordLines) {
-    if (wl.timeMs > positionMs) {
-      break;
-    }
-    current = wl;
-  }
-
-  // Check if the position is still within the line's end time
-  if (current !== null && positionMs <= current.endMs) {
-    return current;
-  }
-
-  return null;
+export function findWordTimedLine(wordLines, positionMs) {
+  const index = findWordTimedLineIndex(wordLines, positionMs);
+  return index === -1 ? null : (wordLines?.[index] ?? null);
 }
 
 /**
- * Find which word is currently active (being sung) at the given position.
+ * Index of the applicable word-timed line, or -1.
+ *
+ * @param {readonly WordTimedLyricLine[] | undefined} wordLines
+ * @param {number} positionMs
+ * @returns {number}
+ */
+function findWordTimedLineIndex(wordLines, positionMs) {
+  if (!wordLines || wordLines.length === 0) {
+    return -1;
+  }
+
+  if (!Number.isFinite(positionMs) || positionMs < 0) {
+    return -1;
+  }
+
+  return lastIndexAtOrBefore(wordLines, positionMs, readWordLineTimeMs);
+}
+
+/**
+ * Selection indices for a position, without building a display state.
+ *
+ * The word-highlight tick runs many times per second but the highlight only
+ * moves on a fraction of those ticks. Callers compare this cheap result first
+ * and skip rebuilding state and markup when nothing moved.
+ *
+ * @param {Extract<LyricsProviderResult, { kind: 'synced' }>} lookup
+ * @param {number} positionMs
+ * @returns {SyncedHighlight}
+ */
+export function selectSyncedHighlight(lookup, positionMs) {
+  const wordLineIndex = findWordTimedLineIndex(lookup.wordLines, positionMs);
+  const wordLine = wordLineIndex === -1 ? null : lookup.wordLines[wordLineIndex];
+
+  return {
+    lineIndex: selectLyricLineIndex(lookup.lines, positionMs),
+    wordLineIndex,
+    activeWordIndex:
+      wordLine === undefined || wordLine === null
+        ? -1
+        : selectActiveWordIndex(wordLine, positionMs),
+  };
+}
+
+/**
+ * Index of the word the highlight has reached, or -1 before the line starts.
+ *
+ * The return value is a progress pointer, not strictly "the word being sung":
+ * callers render words before it as already sung, the word at it as active, and
+ * words after it as upcoming. Once the whole line is finished the pointer moves
+ * past the last word (`words.length`) so no word stays stuck in the active
+ * style during instrumental gaps or after the final line.
  *
  * @param {WordTimedLyricLine} wordLine
  * @param {number} positionMs
- * @returns {number}  Index of the active word, or -1 if none.
+ * @returns {number}
  */
-function selectActiveWordIndex(wordLine, positionMs) {
+export function selectActiveWordIndex(wordLine, positionMs) {
   const { words } = wordLine;
   if (words.length === 0) {
     return -1;
   }
 
-  for (let i = words.length - 1; i >= 0; i--) {
-    const w = words[i];
-    if (w !== undefined && positionMs >= w.beginMs) {
-      return i;
-    }
+  if (!Number.isFinite(positionMs) || positionMs < 0) {
+    return -1;
   }
 
-  return -1;
+  const lastWord = words[words.length - 1];
+  const lineEndMs = Math.max(wordLine.endMs, lastWord?.endMs ?? wordLine.endMs);
+  if (positionMs > lineEndMs) {
+    return words.length;
+  }
+
+  return lastIndexAtOrBefore(words, positionMs, readWordBeginMs);
+}
+
+/**
+ * @param {WordTimedLyricLine} wordLine
+ * @returns {number}
+ */
+function readWordLineTimeMs(wordLine) {
+  return wordLine.timeMs;
+}
+
+/**
+ * @param {import('../lyrics/types.js').WordTiming} word
+ * @returns {number}
+ */
+function readWordBeginMs(word) {
+  return word.beginMs;
 }
 
 /**
