@@ -6,9 +6,9 @@ coverage/
 .zcode/
 *.log
 .claude/settings.local.json
-.docs/assets/engineering
-.docs/assets/completed
-.docs/assets/harness
-.docs/assets/operations
-.docs/assets/players
-.docs/assets/release-notes
+.docs/engineering/
+.docs/completed/
+.docs/harness/
+.docs/operations/
+.docs/players/
+.docs/exec-plans
