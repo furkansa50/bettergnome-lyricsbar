@@ -33,6 +33,15 @@ export function shouldRefreshSettingsAccess(previous, next) {
 }
 
 /**
+ * @param {LyricBarSettings} previous
+ * @param {LyricBarSettings} next
+ * @returns {boolean}
+ */
+export function shouldRefreshLyricsQuery(previous, next) {
+  return previous.lyricsSource !== next.lyricsSource;
+}
+
+/**
  * @param {readonly string[]} left
  * @param {readonly string[]} right
  * @returns {boolean}

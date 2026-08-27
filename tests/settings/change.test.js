@@ -1,10 +1,26 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  shouldRefreshLyricsQuery,
   shouldRefreshPlayerSelection,
   shouldRefreshSettingsAccess,
   shouldRepositionPanelIndicator,
 } from '../../src/domain/settings/change.js';
+
+describe('shouldRefreshLyricsQuery', () => {
+  it('returns false when lyrics source is unchanged', () => {
+    expect(shouldRefreshLyricsQuery(settings(['spotify']), settings(['spotify']))).toBe(false);
+  });
+
+  it('returns true when lyrics source changes', () => {
+    expect(
+      shouldRefreshLyricsQuery(
+        { ...settings(['spotify']), lyricsSource: 'better-lyrics' },
+        { ...settings(['spotify']), lyricsSource: 'musixmatch' },
+      ),
+    ).toBe(true);
+  });
+});
 
 describe('shouldRefreshPlayerSelection', () => {
   it('returns false when player priority is unchanged', () => {
@@ -84,14 +100,13 @@ function settings(playerPriority, overrides = {}) {
     hideWhenIdle: false,
     playerPriority,
     browserPlayerService: 'spotify',
-    lyricsSource: 'auto',
+    lyricsSource: 'musixmatch',
     cacheEnabled: true,
     debugLogging: false,
     textColorMode: 'default',
     customTextColor: '#ffffff',
     textShadowEnabled: true,
     glowStrength: 1.0,
-    autoWidth: false,
     ...overrides,
   };
 }

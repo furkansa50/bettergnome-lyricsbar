@@ -41,6 +41,9 @@ export class LyricsService {
   /** @type {boolean} */
   #enabled = true;
 
+  /** @type {boolean} */
+  #bypassCacheNext = false;
+
   /** @type {number} */
   #generation = 0;
 
@@ -142,6 +145,15 @@ export class LyricsService {
       return;
     }
 
+    const bypassCache = this.#bypassCacheNext;
+    this.#bypassCacheNext = false;
+
+    if (bypassCache) {
+      this.#logger?.debug('cache-bypassed');
+      this.#fetchFromProvider(generation, key, query, player);
+      return;
+    }
+
     this.#cache.get(query, (cached) => {
       if (!this.#shouldApply(generation, key)) {
         this.#logger?.debug('lookup-stale', { stage: 'cache' });
@@ -153,28 +165,55 @@ export class LyricsService {
         return;
       }
       this.#logger?.debug('cache-result', { source: 'miss' });
-      this.#provider.lookup(query, (result) => {
-        if (!this.#shouldApply(generation, key)) {
-          this.#logger?.debug('lookup-stale', { stage: 'provider' });
-          return;
-        }
-        if (
-          shouldWriteLyricsCache(player, result, {
-            browserPlayerService: this.#getBrowserPlayerService(),
-          })
-        ) {
-          try {
-            this.#cache.put(query, result);
-          } catch {
-            // best-effort; cache failure must not break the live emission
-          }
-        } else {
-          this.#logger?.debug('cache-put-skipped', { reason: 'low-confidence-browser-miss' });
-        }
-        this.#logger?.debug('provider-result', { kind: result.kind });
-        this.#applyResult(generation, key, result);
-      });
+      this.#fetchFromProvider(generation, key, query, player);
     });
+  }
+
+  /**
+   * @param {number} generation
+   * @param {string} key
+   * @param {LyricsQuery} query
+   * @param {PlayerSnapshot} player
+   * @returns {void}
+   */
+  #fetchFromProvider(generation, key, query, player) {
+    this.#provider.lookup(query, (result) => {
+      if (!this.#shouldApply(generation, key)) {
+        this.#logger?.debug('lookup-stale', { stage: 'provider' });
+        return;
+      }
+      if (
+        shouldWriteLyricsCache(player, result, {
+          browserPlayerService: this.#getBrowserPlayerService(),
+        })
+      ) {
+        try {
+          this.#cache.put(query, result);
+        } catch {
+          // best-effort; cache failure must not break the live emission
+        }
+      } else {
+        this.#logger?.debug('cache-put-skipped', { reason: 'low-confidence-browser-miss' });
+      }
+      this.#logger?.debug('provider-result', { kind: result.kind });
+      this.#applyResult(generation, key, result);
+    });
+  }
+
+  /**
+   * Force re-query lyrics for the current active player.
+   *
+   * @param {{ bypassCache?: boolean }} [options]
+   * @returns {void}
+   */
+  forceReload(options = {}) {
+    if (!this.#enabled || this.#currentPlayer === null) {
+      return;
+    }
+    const player = this.#currentPlayer;
+    this.#currentKey = null;
+    this.#bypassCacheNext = options.bypassCache === true;
+    this.setActivePlayer(player);
   }
 
   /**

@@ -42,6 +42,7 @@ describe('mapHttpResultToProviderResult', () => {
         durationMs: null,
       },
       text: 'Line one',
+      source: 'LRCLIB',
     });
   });
 

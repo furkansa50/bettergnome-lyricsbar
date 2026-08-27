@@ -2,10 +2,10 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Soup from 'gi://Soup';
 
-import { parseLrc } from '../../domain/lyrics/lrc.js';
 import { parseTtml, wordLinesToLyricLines } from '../../domain/lyrics/ttml.js';
-import { buildUnisonUrl, buildBetterLyricsUrl } from './better-lyrics-url.js';
+import { buildBetterLyricsUrl } from './better-lyrics-url.js';
 import { LrclibProvider } from './lrclib.js';
+import { MusixmatchProvider } from './musixmatch.js';
 
 /**
  * @import { LifecycleRegistry } from '../lifecycle.js'
@@ -37,6 +37,9 @@ export class BetterLyricsProvider {
   /** @type {LrclibProvider} */
   #lrclibProvider;
 
+  /** @type {MusixmatchProvider} */
+  #musixmatchProvider;
+
   /** @type {() => import('../../domain/settings/types.js').LyricsSource} */
   #getLyricsSource;
 
@@ -58,7 +61,7 @@ export class BetterLyricsProvider {
     this.#timeoutMs =
       typeof options.timeoutMs === 'number' ? options.timeoutMs : DEFAULT_TIMEOUT_MS;
     this.#logger = options.logger ?? null;
-    this.#getLyricsSource = options.getLyricsSource ?? (() => 'auto');
+    this.#getLyricsSource = options.getLyricsSource ?? (() => 'musixmatch');
 
     if (options.session) {
       this.#session = options.session;
@@ -73,6 +76,12 @@ export class BetterLyricsProvider {
       session: this.#session,
       timeoutMs: this.#timeoutMs,
       logger: this.#logger ? this.#logger.child('lrclib') : undefined,
+    });
+
+    this.#musixmatchProvider = new MusixmatchProvider(this.#lifecycle, {
+      session: this.#session,
+      timeoutMs: this.#timeoutMs,
+      logger: this.#logger ? this.#logger.child('musixmatch') : undefined,
     });
 
     this.#lifecycle.add(() => {
@@ -109,11 +118,10 @@ export class BetterLyricsProvider {
    * Lookup lyrics.
    *
    * Provider order depends on the `lyrics-source` setting:
-   *   - `'auto'` (default): Unison -> Better Lyrics API -> LRCLIB.
-   *     Unison is tried first; Better Lyrics is kept as fallback since cached
-   *     tracks return word-level TTML; LRCLIB is the most reliable key-less source
-   *     and is tried last.
-   *   - `'better-lyrics'`: Unison -> Better Lyrics API only (no LRCLIB).
+   *   - `'musixmatch'` (default): Musixmatch (RichSync/LRC) → Better Lyrics → LRCLIB.
+   *     Musixmatch is checked first for word-level RichSync; Better Lyrics is
+   *     queried next; LRCLIB is the final fallback for line-by-line synced lyrics.
+   *   - `'better-lyrics'`: Better Lyrics API → Musixmatch only (no LRCLIB).
    *   - `'lrclib'`: LRCLIB only.
    *
    * @param {LyricsQuery} query
@@ -134,12 +142,48 @@ export class BetterLyricsProvider {
       return;
     }
 
-    const allowLrclibFallback = source === 'auto';
-    this.#lookupUnison(query, callback, allowLrclibFallback);
+    if (source === 'better-lyrics') {
+      this.#logger?.debug('lookup-better-lyrics-first');
+      this.#lookupBetterLyrics(query, callback, false);
+      return;
+    }
+
+    // Default: musixmatch — full chain: Musixmatch → Better Lyrics → LRCLIB.
+    this.#logger?.debug('lookup-musixmatch-first');
+    this.#lookupMusixmatchFirst(query, callback);
   }
 
   /**
-   * Try the Better Lyrics API. On a miss, fall back to LRCLIB when allowed.
+   * Default chain: Musixmatch → Better Lyrics → LRCLIB.
+   *
+   * @param {LyricsQuery} query
+   * @param {LyricsLookupCallback} callback
+   * @returns {void}
+   */
+  #lookupMusixmatchFirst(query, callback) {
+    this.#logger?.debug('musixmatch-request-start', {
+      artist: query.artist,
+      title: query.title,
+    });
+
+    this.#musixmatchProvider.lookup(query, (result) => {
+      if (!this.#enabled) {
+        return;
+      }
+
+      this.#logger?.debug('musixmatch-result', { kind: result.kind });
+      if (result.kind === 'synced' || result.kind === 'plain') {
+        callback(result);
+        return;
+      }
+
+      // Musixmatch miss → try Better Lyrics next, then LRCLIB.
+      this.#lookupBetterLyrics(query, callback, true);
+    });
+  }
+
+  /**
+   * Try the Better Lyrics API. On a miss, fall back to Musixmatch.
    *
    * @param {LyricsQuery} query
    * @param {LyricsLookupCallback} callback
@@ -149,7 +193,7 @@ export class BetterLyricsProvider {
   #lookupBetterLyrics(query, callback, allowLrclibFallback) {
     const url = buildBetterLyricsUrl(query);
     if (url === null) {
-      this.#fallbackToLrclib(query, callback, allowLrclibFallback);
+      this.#lookupMusixmatch(query, callback, allowLrclibFallback);
       return;
     }
 
@@ -174,46 +218,38 @@ export class BetterLyricsProvider {
         return;
       }
 
-      // Better Lyrics miss (404 / 401 / not-found / error) -> fall back to LRCLIB when allowed.
-      this.#fallbackToLrclib(query, callback, allowLrclibFallback);
+      // Better Lyrics miss (404 / 401 / not-found / error) -> try Musixmatch next.
+      this.#lookupMusixmatch(query, callback, allowLrclibFallback);
     });
   }
 
   /**
-   * Try Unison. On a miss, fall back to Better Lyrics.
+   * Try Musixmatch for word-level RichSync or synced lyrics.
+   * On a miss, fall back to LRCLIB when allowed.
    *
    * @param {LyricsQuery} query
    * @param {LyricsLookupCallback} callback
    * @param {boolean} allowLrclibFallback
    * @returns {void}
    */
-  #lookupUnison(query, callback, allowLrclibFallback) {
-    const unisonUrl = buildUnisonUrl(query);
-    if (unisonUrl === null) {
-      this.#logger?.debug('lookup-skipped', { reason: 'invalid-query' });
-      this.#lookupBetterLyrics(query, callback, allowLrclibFallback);
-      return;
-    }
-
-    this.#logger?.debug('unison-request-start', {
+  #lookupMusixmatch(query, callback, allowLrclibFallback) {
+    this.#logger?.debug('musixmatch-request-start', {
       artist: query.artist,
       title: query.title,
     });
 
-    this.#send(unisonUrl, (unisonResult) => {
+    this.#musixmatchProvider.lookup(query, (result) => {
       if (!this.#enabled) {
         return;
       }
 
-      const unisonParsed = this.#parseUnisonResponse(unisonResult, query);
-      if (unisonParsed !== null) {
-        this.#logger?.debug('unison-hit', { kind: unisonParsed.kind });
-        callback(unisonParsed);
+      this.#logger?.debug('musixmatch-result', { kind: result.kind });
+      if (result.kind === 'synced' || result.kind === 'plain') {
+        callback(result);
         return;
       }
 
-      // Unison miss -> try Better Lyrics next.
-      this.#lookupBetterLyrics(query, callback, allowLrclibFallback);
+      this.#fallbackToLrclib(query, callback, allowLrclibFallback);
     });
   }
 
@@ -230,56 +266,6 @@ export class BetterLyricsProvider {
       return;
     }
     callback(Object.freeze({ kind: 'not-found' }));
-  }
-
-  /**
-   * Parse Unison response. Unison returns:
-   *   success: { success: true, lyrics: "<ttml or lrc>", ... }
-   *   failure: { success: false, error: "...", code: "NOT_FOUND" }
-   *
-   * The payload may be TTML (word-level) or plain LRC, so both are attempted.
-   * Track info comes from the query: downstream sync policies need a real
-   * duration to normalize cumulative browser positions.
-   *
-   * @param {{ statusCode?: number | null, body?: string | null, error?: string | null }} result
-   * @param {LyricsQuery} query
-   * @returns {LyricsProviderResult | null}
-   */
-  #parseUnisonResponse(result, query) {
-    if (result.error || result.statusCode === null || result.statusCode !== 200) {
-      return null;
-    }
-
-    const { body } = result;
-    if (typeof body !== 'string' || body === '') {
-      return null;
-    }
-
-    let parsed;
-    try {
-      parsed = JSON.parse(body);
-    } catch {
-      return null;
-    }
-
-    if (!parsed || parsed.success !== true || typeof parsed.lyrics !== 'string') {
-      return null;
-    }
-
-    const lyricsContent = parsed.lyrics.trim();
-    if (lyricsContent === '') {
-      return null;
-    }
-
-    /** @type {import('../../domain/lyrics/types.js').ProviderTrackInfo} */
-    const track = {
-      trackName: query.title,
-      artistName: query.artist,
-      albumName: query.album,
-      durationMs: query.durationMs,
-    };
-
-    return this.#parseTtmlToResult(lyricsContent, track) ?? parseLrcToResult(lyricsContent, track);
   }
 
   /**
@@ -308,7 +294,7 @@ export class BetterLyricsProvider {
     // 401 means the track is not cached and the API requires an X-API-Key for
     // a fresh fetch. From the caller's perspective the public API has no
     // lyrics for this query, so treat it as a miss and let the fallback chain
-    // (Unison -> LRCLIB) take over.
+    // (Musixmatch -> LRCLIB) take over.
     if (status === 401) {
       return Object.freeze({ kind: 'not-found' });
     }
@@ -372,6 +358,7 @@ export class BetterLyricsProvider {
       lines: Object.freeze(lines),
       wordLines: Object.freeze(wordLines),
       plainText,
+      source: 'Better Lyrics',
     });
   }
 
@@ -469,29 +456,6 @@ export class BetterLyricsProvider {
       },
     );
   }
-}
-
-/**
- * Build a synced result from an LRC payload. LRC carries no word-level timing,
- * so `wordLines` is empty and the display layer falls back to line highlight.
- *
- * @param {string} lrc
- * @param {import('../../domain/lyrics/types.js').ProviderTrackInfo} track
- * @returns {LyricsProviderResult | null}
- */
-function parseLrcToResult(lrc, track) {
-  const lines = parseLrc(lrc);
-  if (lines.length === 0) {
-    return null;
-  }
-
-  return Object.freeze({
-    kind: 'synced',
-    track: Object.freeze(track),
-    lines: Object.freeze(lines),
-    wordLines: Object.freeze([]),
-    plainText: lines.map((line) => line.text).join('\n'),
-  });
 }
 
 /**

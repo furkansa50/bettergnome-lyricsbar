@@ -61,12 +61,13 @@ export function parseLrclibResponse(value) {
         lines: Object.freeze(lines),
         wordLines: Object.freeze([]),
         plainText: plain ?? '',
+        source: 'LRCLIB',
       });
     }
   }
 
   if (plain !== null) {
-    return Object.freeze({ kind: 'plain', track, text: plain });
+    return Object.freeze({ kind: 'plain', track, text: plain, source: 'LRCLIB' });
   }
 
   return notFound();

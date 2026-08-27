@@ -99,6 +99,7 @@ declare module 'gi://St' {
       y_expand?: boolean;
       vertical?: boolean;
       orientation?: unknown;
+      x_align?: unknown;
     });
 
     orientation: unknown;
@@ -114,7 +115,12 @@ declare module 'gi://St' {
   }
 
   export class Label {
-    constructor(config: { text: string; y_align?: unknown; style_class?: string });
+    constructor(config: {
+      text: string;
+      y_align?: unknown;
+      style_class?: string;
+      visible?: boolean;
+    });
 
     text: string;
     style: string;
@@ -138,7 +144,18 @@ declare module 'gi://St' {
   }
 
   export class Button {
-    constructor(config?: { style_class?: string; child?: unknown; accessible_name?: string });
+    constructor(config?: {
+      style_class?: string;
+      child?: unknown;
+      accessible_name?: string;
+      label?: string;
+      can_focus?: boolean;
+      reactive?: boolean;
+      x_align?: unknown;
+      x_expand?: boolean;
+      y_align?: unknown;
+      y_expand?: boolean;
+    });
 
     child: unknown;
 
@@ -266,7 +283,7 @@ declare module 'resource:///org/gnome/shell/ui/popupMenu.js' {
     readonly section: unknown;
   }
   export class PopupBaseMenuItem {
-    constructor(config?: { reactive?: boolean; can_focus?: boolean });
+    constructor(config?: { reactive?: boolean; can_focus?: boolean; style_class?: string });
     setOrnament(ornament: Ornament): void;
     add_child(actor: unknown): void;
   }

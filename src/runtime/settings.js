@@ -6,6 +6,7 @@ import { normalizeSettings } from '../domain/settings/normalize.js';
  *
  * @typedef {Readonly<{
  *   get_string(key: string): string,
+ *   set_string(key: string, value: string): boolean,
  *   get_int(key: string): number,
  *   get_strv(key: string): string[],
  *   get_boolean(key: string): boolean,
@@ -18,7 +19,6 @@ import { normalizeSettings } from '../domain/settings/normalize.js';
 const SETTING_KEYS = [
   'panel-position',
   'max-width',
-  'auto-width',
   'text-align',
   'fallback-mode',
   'show-settings-icon',
@@ -67,8 +67,15 @@ export class SettingsAdapter {
       customTextColor: this.#settings.get_string('style-text-color-custom'),
       textShadowEnabled: this.#settings.get_boolean('style-text-shadow'),
       glowStrength: this.#settings.get_double('style-glow-strength'),
-      autoWidth: this.#settings.get_boolean('auto-width'),
     });
+  }
+
+  /**
+   * @param {import('../domain/settings/types.js').LyricsSource} source
+   * @returns {void}
+   */
+  setLyricsSource(source) {
+    this.#settings.set_string('lyrics-source', source);
   }
 
   /**

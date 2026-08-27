@@ -32,6 +32,7 @@ import { computeTargetSetPositionMs } from '../domain/display/track-progress.js'
 import { selectLyricLineIndex } from '../domain/lyrics/lrc.js';
 import { selectActivePlayer } from '../domain/mpris/selection.js';
 import {
+  shouldRefreshLyricsQuery,
   shouldRefreshPlayerSelection,
   shouldRefreshSettingsAccess,
   shouldRepositionPanelIndicator,
@@ -94,7 +95,7 @@ const POSITION_POLL_INTERVAL_MS = 500;
  * This tick does no I/O -- it interpolates the last sampled position and
  * re-renders only when the highlight actually moves.
  */
-const WORD_TICK_INTERVAL_MS = 80;
+const WORD_TICK_INTERVAL_MS = 40;
 
 const FIREFOX_STAGNANT_POSITION_THRESHOLD_MS = 2_500;
 
@@ -281,6 +282,13 @@ export class LyricBarController {
       if (previousSettings !== null && shouldRefreshSettingsAccess(previousSettings, settings)) {
         this.#syncSettingsAccess();
       }
+      if (previousSettings !== null && shouldRefreshLyricsQuery(previousSettings, settings)) {
+        this.#logger?.debug('lyrics-source-changed', {
+          from: previousSettings.lyricsSource,
+          to: settings.lyricsSource,
+        });
+        this.#lyricsService?.forceReload({ bypassCache: true });
+      }
       if (previousSettings !== null && shouldRefreshPlayerSelection(previousSettings, settings)) {
         this.#refreshSelection();
         return;
@@ -454,7 +462,17 @@ export class LyricBarController {
       onPrevious: () => this.#invokePlayerControl((proxy) => proxy.previous()),
       onSeek: (positionMs) => this.#seekToPosition(positionMs),
       onSeekBy: (offsetMs) => this.#seekByOffset(offsetMs),
+      onSelectLyricsSource: (source) => this.#setLyricsSource(source),
     });
+  }
+
+  /**
+   * @param {import('../domain/settings/types.js').LyricsSource} source
+   * @returns {void}
+   */
+  #setLyricsSource(source) {
+    this.#settings?.setLyricsSource(source);
+    this.#lyricsService?.forceReload({ bypassCache: true });
   }
 
   /**
@@ -480,18 +498,16 @@ export class LyricBarController {
         return;
       }
 
-      if (typeof trackId === 'string' && trackId !== '') {
+      // Prefer relative Seek(positionMs - currentMs) when current position is known.
+      // Many MPRIS players (notably Spotify Desktop and Chromium) either do not
+      // implement SetPosition or erroneously restart the track from 0:00 when
+      // SetPosition is called, whereas Seek(offset) is universally supported.
+      const currentMs = this.#currentPositionMs();
+      if (currentMs !== null) {
+        proxy.seek(positionMs - currentMs);
+      } else if (typeof trackId === 'string' && trackId !== '') {
         const targetMs = computeTargetSetPositionMs(positionMs, this.#syncPositionOffsetMs);
         proxy.setPosition(trackId, targetMs);
-      } else {
-        const currentMs = this.#currentPositionMs();
-        if (currentMs === null) {
-          // Without a current position a relative seek would jump by the whole
-          // target instead of to it, so refuse rather than scramble playback.
-          this.#logger?.debug('seek-rejected', { reason: 'no-track-id-and-no-known-position' });
-          return;
-        }
-        proxy.seek(positionMs - currentMs);
       }
 
       this.#applyOptimisticSeek(positionMs);
@@ -659,7 +675,7 @@ export class LyricBarController {
 
     const logger = this.#logger?.child('lyrics');
     const provider = new BetterLyricsProvider(lifecycle, {
-      getLyricsSource: () => this.#currentSettings?.lyricsSource ?? 'auto',
+      getLyricsSource: () => this.#currentSettings?.lyricsSource ?? 'musixmatch',
       logger: logger?.child('better-lyrics'),
     });
     const cache = new LyricsCache(
@@ -1244,7 +1260,6 @@ export class LyricBarController {
         return;
       }
 
-      this.#lastKnownPositionMs = effectivePositionMs;
       this.#anchorPositionClock(
         player,
         effectivePositionMs,
@@ -1252,7 +1267,12 @@ export class LyricBarController {
         tracked.proxy.rate,
       );
 
-      this.#renderSyncedPosition(effectivePositionMs);
+      const renderPositionMs =
+        estimatePositionMs(this.#positionClock, monotonicNowMs(), this.#activePositionTrackKey()) ??
+        effectivePositionMs;
+
+      this.#lastKnownPositionMs = renderPositionMs;
+      this.#renderSyncedPosition(renderPositionMs);
       this.#updateWordTick();
 
       // The popup's clock and progress bar advance on every tick, not only when
@@ -1475,6 +1495,8 @@ export class LyricBarController {
       seekStepMs: SEEK_STEP_MS,
       lyrics: syncedLookup,
       activeLineIndex,
+      lyricsSource: this.#currentSettings?.lyricsSource ?? 'musixmatch',
+      resolvedProvider: syncedLookup?.source ?? null,
     });
   }
 

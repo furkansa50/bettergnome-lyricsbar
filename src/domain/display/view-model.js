@@ -16,7 +16,6 @@ import { formatDisplayState } from './state.js';
  *   glowStrength: number,
  *   words: readonly WordTiming[],
  *   activeWordIndex: number,
- *   autoWidth: boolean,
  * }>} IndicatorViewModel
  */
 
@@ -44,6 +43,5 @@ export function buildIndicatorViewModel(state, settings) {
     glowStrength: settings.glowStrength,
     words: state.kind === 'lyrics' ? state.words : [],
     activeWordIndex: state.kind === 'lyrics' ? state.activeWordIndex : -1,
-    autoWidth: settings.autoWidth,
   };
 }

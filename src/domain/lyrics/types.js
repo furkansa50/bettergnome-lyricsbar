@@ -45,12 +45,14 @@
  *   lines: readonly LyricLine[],
  *   wordLines: readonly WordTimedLyricLine[],
  *   plainText: string,
+ *   source?: string,
  * }>} SyncedLyricsResult
  *
  * @typedef {Readonly<{
  *   kind: 'plain',
  *   track: ProviderTrackInfo,
  *   text: string,
+ *   source?: string,
  * }>} PlainLyricsResult
  *
  * @typedef {Readonly<{

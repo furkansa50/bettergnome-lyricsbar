@@ -113,17 +113,6 @@ export default class LyricBarPreferences extends ExtensionPreferences {
     });
     settings.bind('max-width', maxWidthRow, 'value', Gio.SettingsBindFlags.DEFAULT);
 
-    // auto-width: SwitchRow
-    const autoWidthRow = new Adw.SwitchRow({
-      title: _t('Auto width', 'Otomatik genişlik'),
-      subtitle: _t(
-        'Automatically adjust label width to fit lyrics text (up to maximum width).',
-        'Etiket genişliğini şarkı sözü metnine otomatik ayarla (maksimum genişliğe kadar).',
-      ),
-      active: settings.get_boolean('auto-width'),
-    });
-    settings.bind('auto-width', autoWidthRow, 'active', Gio.SettingsBindFlags.DEFAULT);
-
     // text-align: ComboRow
     const alignments = ['left', 'center', 'right'];
     const textAlignRow = new Adw.ComboRow({
@@ -221,7 +210,6 @@ export default class LyricBarPreferences extends ExtensionPreferences {
 
     displayGroup.add(panelPositionRow);
     displayGroup.add(maxWidthRow);
-    displayGroup.add(autoWidthRow);
     displayGroup.add(textAlignRow);
     displayGroup.add(fallbackModeRow);
     displayGroup.add(hideWhenIdleRow);
@@ -462,7 +450,7 @@ export default class LyricBarPreferences extends ExtensionPreferences {
     behaviorGroup.add(cacheEnabledRow);
 
     // lyrics-source: ComboRow
-    const lyricsSources = ['auto', 'better-lyrics', 'lrclib'];
+    const lyricsSources = ['musixmatch', 'better-lyrics', 'lrclib'];
     const lyricsSourceRow = new Adw.ComboRow({
       title: _t('Lyrics provider', 'Şarkı sözü kaynağı'),
       subtitle: _t(
@@ -472,12 +460,12 @@ export default class LyricBarPreferences extends ExtensionPreferences {
       model: new Gtk.StringList({
         strings: [
           _t(
-            'Auto (Unison -> Better Lyrics -> LRCLIB)',
-            'Otomatik (Unison -> Better Lyrics -> LRCLIB)',
+            'Musixmatch (Musixmatch → Better Lyrics → LRCLIB)',
+            'Musixmatch (Musixmatch → Better Lyrics → LRCLIB)',
           ),
           _t(
-            'Unison + Better Lyrics (Word-by-word synced)',
-            'Unison + Better Lyrics (Kelime kelime senkronize)',
+            'Better Lyrics (Better Lyrics → Musixmatch)',
+            'Better Lyrics (Better Lyrics → Musixmatch)',
           ),
           'LRCLIB',
         ],

@@ -13,9 +13,8 @@ const MAX_MAX_WIDTH = 720;
 const DEFAULT_FALLBACK_MODE = 'track';
 const DEFAULT_PLAYER_PRIORITY = ['spotify'];
 const DEFAULT_BROWSER_PLAYER_SERVICE = 'auto';
-const DEFAULT_LYRICS_SOURCE = 'auto';
+const DEFAULT_LYRICS_SOURCE = 'musixmatch';
 const DEFAULT_TEXT_ALIGN = 'left';
-const DEFAULT_AUTO_WIDTH = false;
 const DEFAULT_HIDE_WHEN_IDLE = true;
 const DEFAULT_GLOW_STRENGTH = 1.0;
 const MIN_GLOW_STRENGTH = 0.0;
@@ -30,7 +29,7 @@ const BROWSER_PLAYER_SERVICES = new Set([
   'apple-music',
   'generic',
 ]);
-const LYRICS_SOURCES = new Set(['auto', 'better-lyrics', 'lrclib']);
+const LYRICS_SOURCES = new Set(['musixmatch', 'better-lyrics', 'lrclib']);
 const TEXT_ALIGNS = new Set(['left', 'center', 'right']);
 
 /**
@@ -67,7 +66,6 @@ export function normalizeSettings(raw) {
     customTextColor: normalizeCustomTextColor(raw.customTextColor),
     textShadowEnabled: normalizeBoolean(raw.textShadowEnabled, DEFAULT_TEXT_SHADOW_ENABLED),
     glowStrength: normalizeGlowStrength(raw.glowStrength),
-    autoWidth: normalizeBoolean(raw.autoWidth, DEFAULT_AUTO_WIDTH),
   };
 }
 

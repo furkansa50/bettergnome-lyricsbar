@@ -50,7 +50,6 @@ describe('normalizeSettings', () => {
       customTextColor: '#ff007f',
       textShadowEnabled: false,
       glowStrength: 1.5,
-      autoWidth: false,
     });
   });
 
@@ -81,14 +80,13 @@ describe('normalizeSettings', () => {
       hideWhenIdle: true,
       playerPriority: ['spotify'],
       browserPlayerService: 'auto',
-      lyricsSource: 'auto',
+      lyricsSource: 'musixmatch',
       cacheEnabled: true,
       debugLogging: false,
       textColorMode: 'default',
       customTextColor: '#ffffff',
       textShadowEnabled: true,
       glowStrength: 1.0,
-      autoWidth: false,
     });
   });
 });
@@ -208,13 +206,14 @@ describe('normalizeGlowStrength', () => {
 
 describe('normalizeLyricsSource', () => {
   it('accepts known lyrics sources', () => {
-    expect(normalizeLyricsSource('auto')).toBe('auto');
+    expect(normalizeLyricsSource('musixmatch')).toBe('musixmatch');
     expect(normalizeLyricsSource('better-lyrics')).toBe('better-lyrics');
     expect(normalizeLyricsSource('lrclib')).toBe('lrclib');
   });
 
   it('rejects unknown lyrics sources', () => {
-    expect(normalizeLyricsSource('unknown')).toBe('auto');
-    expect(normalizeLyricsSource(null)).toBe('auto');
+    expect(normalizeLyricsSource('auto')).toBe('musixmatch');
+    expect(normalizeLyricsSource('unknown')).toBe('musixmatch');
+    expect(normalizeLyricsSource(null)).toBe('musixmatch');
   });
 });

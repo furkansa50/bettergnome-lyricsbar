@@ -31,6 +31,7 @@ describe('parseLrclibResponse', () => {
       ],
       wordLines: [],
       plainText: 'Look at the stars\nLook how they shine for you',
+      source: 'LRCLIB',
     });
   });
 
@@ -64,6 +65,7 @@ describe('parseLrclibResponse', () => {
         durationMs: null,
       },
       text: 'Line one\nLine two',
+      source: 'LRCLIB',
     });
   });
 
@@ -146,6 +148,7 @@ describe('parseLrclibResponse', () => {
         durationMs: null,
       },
       text: 'Line one',
+      source: 'LRCLIB',
     });
   });
 

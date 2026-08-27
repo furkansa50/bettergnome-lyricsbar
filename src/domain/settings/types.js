@@ -3,7 +3,7 @@
  * @typedef {'left' | 'center' | 'right'} TextAlign
  * @typedef {'track' | 'idle' | 'hidden'} FallbackMode
  * @typedef {'auto' | 'spotify' | 'youtube-music' | 'apple-music' | 'generic'} BrowserPlayerService
- * @typedef {'auto' | 'better-lyrics' | 'lrclib'} LyricsSource
+ * @typedef {'musixmatch' | 'better-lyrics' | 'lrclib'} LyricsSource
  * @typedef {'default' | 'system' | 'white' | 'black' | 'custom'} TextColorMode
  *
  * @typedef {Readonly<{
@@ -22,7 +22,6 @@
  *   customTextColor?: unknown,
  *   textShadowEnabled?: unknown,
  *   glowStrength?: unknown,
- *   autoWidth?: unknown,
  * }>} RawSettings
  *
  * @typedef {Readonly<{
@@ -41,7 +40,6 @@
  *   customTextColor: string,
  *   textShadowEnabled: boolean,
  *   glowStrength: number,
- *   autoWidth: boolean,
  * }>} LyricBarSettings
  */
 

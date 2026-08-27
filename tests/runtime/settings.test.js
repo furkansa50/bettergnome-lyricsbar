@@ -21,14 +21,13 @@ describe('SettingsAdapter', () => {
       hideWhenIdle: false,
       playerPriority: ['spotify'],
       browserPlayerService: 'auto',
-      lyricsSource: 'auto',
+      lyricsSource: 'musixmatch',
       cacheEnabled: true,
       debugLogging: false,
       textColorMode: 'default',
       customTextColor: '#ffffff',
       textShadowEnabled: true,
       glowStrength: 1.0,
-      autoWidth: false,
     });
   });
 
@@ -40,16 +39,26 @@ describe('SettingsAdapter', () => {
 
     adapter.subscribe(callback);
 
-    expect(backend.connect).toHaveBeenCalledTimes(16);
+    expect(backend.connect).toHaveBeenCalledTimes(15);
     backend.emit('changed::max-width');
 
     expect(callback).toHaveBeenCalledWith(adapter.read());
 
     lifecycle.dispose();
 
-    expect(backend.disconnect).toHaveBeenCalledTimes(16);
-    expect(backend.disconnect).toHaveBeenNthCalledWith(1, 16);
-    expect(backend.disconnect).toHaveBeenNthCalledWith(16, 1);
+    expect(backend.disconnect).toHaveBeenCalledTimes(15);
+    expect(backend.disconnect).toHaveBeenNthCalledWith(1, 15);
+    expect(backend.disconnect).toHaveBeenNthCalledWith(15, 1);
+  });
+
+  it('sets lyrics source on the underlying settings backend', () => {
+    const backend = createSettingsBackend();
+    const lifecycle = new LifecycleRegistry();
+    const adapter = new SettingsAdapter(backend, lifecycle);
+
+    adapter.setLyricsSource('musixmatch');
+
+    expect(backend.set_string).toHaveBeenCalledWith('lyrics-source', 'musixmatch');
   });
 });
 
@@ -63,6 +72,7 @@ function createSettingsBackend(overrides = {}) {
   const handlers = new Map();
 
   return {
+    set_string: vi.fn(() => true),
     get_string: vi.fn((key) => {
       if (key === 'panel-position') {
         return 'center';

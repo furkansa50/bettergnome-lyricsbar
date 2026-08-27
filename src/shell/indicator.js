@@ -88,10 +88,9 @@ class LyricBarIndicatorBase extends PanelMenu.Button {
       setLabelText(this._lyricBarLabel, viewModel.text);
     }
 
-    // Pango.EllipsizeMode: 0=NONE, 3=END. Auto width lets the label grow up to
-    // the CSS max-width instead of being pinned and ellipsized.
-    const width = viewModel.autoWidth ? -1 : viewModel.maxWidth;
-    const ellipsize = viewModel.autoWidth ? 0 : 3;
+    // Pango.EllipsizeMode: 0=NONE, 3=END. Width is pinned to maxWidth and ellipsized.
+    const width = viewModel.maxWidth;
+    const ellipsize = 3;
     let geometryChanged = false;
 
     if (applied.width !== width) {

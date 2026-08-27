@@ -118,22 +118,25 @@ export function displayStateFromSyncedPosition(player, lookup, positionMs) {
   // change-detection callers do and the state built here can never disagree.
   const highlight = selectSyncedHighlight(lookup, positionMs);
   const line = highlight.lineIndex === -1 ? null : (lookup.lines[highlight.lineIndex] ?? null);
-  if (line !== null && line.text.trim() !== '') {
-    const wordLine =
-      highlight.wordLineIndex === -1 ? null : (lookup.wordLines[highlight.wordLineIndex] ?? null);
-    if (wordLine !== null && wordLine !== undefined) {
+  const wordLine =
+    highlight.wordLineIndex === -1 ? null : (lookup.wordLines[highlight.wordLineIndex] ?? null);
+
+  // If a word-timed line applies and is not superseded by a newer plain line,
+  // use the word-timed line's text and word highlight so it never swaps
+  // between word markup and plain text within a single line or inter-line gap.
+  if (wordLine !== null && (line === null || wordLine.timeMs >= line.timeMs)) {
+    if (wordLine.text.trim() !== '') {
       return {
         kind: 'lyrics',
-        // Use the word-timed line's own text so the rendered label is always the
-        // concatenation of the words being highlighted. Mixing it with the plain
-        // synced line makes the label swap between two spellings of the same
-        // line, which is visible as flicker in the panel.
         line: wordLine.text,
         words: wordLine.words,
         activeWordIndex: highlight.activeWordIndex,
         track,
       };
     }
+  }
+
+  if (line !== null && line.text.trim() !== '') {
     return { kind: 'lyrics', line: line.text, words: [], activeWordIndex: -1, track };
   }
 

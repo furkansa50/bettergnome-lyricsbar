@@ -2,43 +2,7 @@
  * @import { LyricsQuery } from '../../domain/lyrics/types.js'
  */
 
-const UNISON_ENDPOINT = 'https://unison.boidu.dev/lyrics';
 const BETTER_LYRICS_ENDPOINT = 'https://lyrics-api.boidu.dev/getLyrics';
-
-/**
- * Build the Unison API URL for a lyrics query.
- *
- * @param {LyricsQuery} query
- * @returns {string | null}
- */
-export function buildUnisonUrl(query) {
-  const artist = normalize(query.artist);
-  const title = normalize(query.title);
-  if (artist === '' || title === '') {
-    return null;
-  }
-
-  /** @type {[string, string][]} */
-  const params = [
-    ['song', title],
-    ['artist', artist],
-  ];
-
-  const album = normalize(query.album);
-  if (album !== '') {
-    params.push(['album', album]);
-  }
-
-  if (
-    typeof query.durationMs === 'number' &&
-    Number.isFinite(query.durationMs) &&
-    query.durationMs > 0
-  ) {
-    params.push(['duration', String(Math.round(query.durationMs / 1000))]);
-  }
-
-  return `${UNISON_ENDPOINT}?${encodeFormQuery(params)}`;
-}
 
 /**
  * Build the Better Lyrics API URL for a lyrics query.

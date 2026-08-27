@@ -16,14 +16,13 @@ const baseSettings = {
   hideWhenIdle: false,
   playerPriority: ['spotify'],
   browserPlayerService: 'auto',
-  lyricsSource: 'auto',
+  lyricsSource: 'musixmatch',
   cacheEnabled: true,
   debugLogging: false,
   textColorMode: 'default',
   customTextColor: '#ffffff',
   textShadowEnabled: true,
   glowStrength: 1.0,
-  autoWidth: false,
 };
 
 describe('buildIndicatorViewModel', () => {
@@ -42,7 +41,6 @@ describe('buildIndicatorViewModel', () => {
       text: 'Hello world',
       visible: true,
       maxWidth: 360,
-      autoWidth: false,
       textAlign: 'left',
       textColorMode: 'default',
       customTextColor: '#ffffff',
@@ -69,7 +67,6 @@ describe('buildIndicatorViewModel', () => {
       text: '',
       visible: false,
       maxWidth: 240,
-      autoWidth: false,
       textAlign: 'left',
       textColorMode: 'default',
       customTextColor: '#ffffff',

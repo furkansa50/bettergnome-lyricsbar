@@ -12,11 +12,6 @@
       <summary>Maximum label width</summary>
       <description>Maximum width in pixels for the top-bar lyric label.</description>
     </key>
-    <key name="auto-width" type="b">
-      <default>false</default>
-      <summary>Auto width</summary>
-      <description>Automatically adjust label width to fit lyrics text (up to maximum width).</description>
-    </key>
     <key name="text-align" type="s">
       <default>'left'</default>
       <summary>Text alignment</summary>
@@ -48,9 +43,9 @@
       <description>How browser MPRIS players should be interpreted ('auto', 'spotify', 'youtube-music', 'apple-music', or 'generic').</description>
     </key>
     <key name="lyrics-source" type="s">
-      <default>'auto'</default>
+      <default>'musixmatch'</default>
       <summary>Lyrics source</summary>
-      <description>Preferred lyrics source provider ('auto', 'better-lyrics', or 'lrclib').</description>
+      <description>Preferred lyrics source provider ('musixmatch', 'better-lyrics', or 'lrclib').</description>
     </key>
     <key name="cache-enabled" type="b">
       <default>true</default>

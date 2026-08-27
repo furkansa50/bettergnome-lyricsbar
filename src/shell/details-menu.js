@@ -31,6 +31,8 @@ import { _t } from '../runtime/i18n.js';
  *   seekStepMs?: number,
  *   lyrics: SyncedLyrics | null,
  *   activeLineIndex: number,
+ *   lyricsSource?: string | null,
+ *   resolvedProvider?: string | null,
  * }>} DetailsMenuState
  *
  * @typedef {Readonly<{
@@ -39,12 +41,13 @@ import { _t } from '../runtime/i18n.js';
  *   onPrevious: () => void,
  *   onSeek: (positionMs: number) => void,
  *   onSeekBy: (offsetMs: number) => void,
+ *   onSelectLyricsSource?: (source: import('../domain/settings/types.js').LyricsSource) => void,
  * }>} DetailsMenuActions
  */
 
 const FALLBACK_ICON_NAME = 'audio-x-generic-symbolic';
-const ALBUM_ART_SIZE = 120;
-const LYRICS_SCROLL_HEIGHT = 200;
+const ALBUM_ART_SIZE = 104;
+const LYRICS_SCROLL_HEIGHT = 230;
 
 /** Fallback rewind / fast-forward step when the controller does not supply one. */
 const DEFAULT_SEEK_STEP_MS = 10_000;
@@ -68,6 +71,13 @@ const ESTIMATED_LINE_HEIGHT = 20;
 export function buildDetailsMenu(menu, actions) {
   const section = new PopupMenu.PopupMenuSection();
 
+  // --- Main Player Card Container ---
+  const cardBox = new St.BoxLayout({
+    style_class: 'lyricbar-details-card',
+    x_expand: true,
+  });
+  setOrientation(cardBox, true);
+
   // --- Album Art + Title / Artist ---
   const headerBox = new St.BoxLayout({ style_class: 'lyricbar-details-header' });
   setOrientation(headerBox, false);
@@ -84,7 +94,7 @@ export function buildDetailsMenu(menu, actions) {
     child: artIcon,
   });
 
-  const infoBox = new St.BoxLayout({ style_class: 'lyricbar-details-info' });
+  const infoBox = new St.BoxLayout({ style_class: 'lyricbar-details-info', x_expand: true });
   setOrientation(infoBox, true);
 
   const titleLabel = new St.Label({
@@ -100,13 +110,13 @@ export function buildDetailsMenu(menu, actions) {
   infoBox.add_child(artistLabel);
   headerBox.add_child(artBin);
   headerBox.add_child(infoBox);
-
-  const headerItem = new PopupMenu.PopupBaseMenuItem({ reactive: false, can_focus: false });
-  headerItem.add_child(headerBox);
-  section.addMenuItem(headerItem);
+  cardBox.add_child(headerBox);
 
   // --- Progress Bar ---
-  const progressBox = new St.BoxLayout({ style_class: 'lyricbar-details-progress' });
+  const progressBox = new St.BoxLayout({
+    style_class: 'lyricbar-details-progress',
+    x_expand: true,
+  });
 
   const positionLabel = new St.Label({
     style_class: 'lyricbar-details-position',
@@ -135,13 +145,13 @@ export function buildDetailsMenu(menu, actions) {
   progressBox.add_child(positionLabel);
   progressBox.add_child(progressBar);
   progressBox.add_child(durationLabel);
-
-  const progressItem = new PopupMenu.PopupBaseMenuItem({ reactive: false, can_focus: false });
-  progressItem.add_child(progressBox);
-  section.addMenuItem(progressItem);
+  cardBox.add_child(progressBox);
 
   // --- Playback Controls ---
-  const controlsBox = new St.BoxLayout({ style_class: 'lyricbar-details-controls' });
+  const controlsBox = new St.BoxLayout({
+    style_class: 'lyricbar-details-controls',
+    x_align: Clutter.ActorAlign.CENTER,
+  });
 
   const prevButton = new St.Button({
     style_class: 'lyricbar-details-button',
@@ -156,7 +166,7 @@ export function buildDetailsMenu(menu, actions) {
     accessible_name: _t('Rewind', 'Geri sar'),
   });
   const playPauseButton = new St.Button({
-    style_class: 'lyricbar-details-button',
+    style_class: 'lyricbar-details-button lyricbar-details-button-play',
     child: new St.Icon({ icon_name: 'media-playback-start-symbolic', icon_size: 24 }),
     accessible_name: _t('Play', 'Oynat'),
   });
@@ -176,10 +186,66 @@ export function buildDetailsMenu(menu, actions) {
   controlsBox.add_child(playPauseButton);
   controlsBox.add_child(forwardButton);
   controlsBox.add_child(nextButton);
+  cardBox.add_child(controlsBox);
 
-  const controlsItem = new PopupMenu.PopupBaseMenuItem({ reactive: false, can_focus: false });
-  controlsItem.add_child(controlsBox);
-  section.addMenuItem(controlsItem);
+  // --- Lyrics Source Section ---
+  const sourceSectionBox = new St.BoxLayout({ style_class: 'lyricbar-details-source-section' });
+  setOrientation(sourceSectionBox, true);
+
+  const sourceHeaderBox = new St.BoxLayout({ style_class: 'lyricbar-details-source-header' });
+  setOrientation(sourceHeaderBox, false);
+
+  const sourceTitleLabel = new St.Label({
+    style_class: 'lyricbar-details-source-title',
+    text: _t('Lyrics source', 'Söz kaynağı'),
+    y_align: Clutter.ActorAlign.CENTER,
+  });
+  const sourceBadgeLabel = new St.Label({
+    style_class: 'lyricbar-details-source-badge',
+    text: '',
+    visible: false,
+    y_align: Clutter.ActorAlign.CENTER,
+  });
+
+  sourceHeaderBox.add_child(sourceTitleLabel);
+  sourceHeaderBox.add_child(sourceBadgeLabel);
+  sourceSectionBox.add_child(sourceHeaderBox);
+
+  const sourcePillsBox = new St.BoxLayout({ style_class: 'lyricbar-details-source-pills' });
+  setOrientation(sourcePillsBox, false);
+
+  /** @type {Array<{ key: import('../domain/settings/types.js').LyricsSource, label: string }>} */
+  const sourceConfigs = [
+    { key: 'musixmatch', label: 'Musixmatch' },
+    { key: 'better-lyrics', label: 'Better Lyrics' },
+    { key: 'lrclib', label: 'LRCLIB' },
+  ];
+
+  /** @type {Array<{ key: import('../domain/settings/types.js').LyricsSource, button: any, handlerId: number }>} */
+  const sourceButtons = [];
+  for (const cfg of sourceConfigs) {
+    const btn = new St.Button({
+      style_class: 'lyricbar-details-source-pill',
+      label: cfg.label,
+      can_focus: true,
+      reactive: true,
+    });
+    const handlerId = btn.connect('clicked', () => {
+      actions.onSelectLyricsSource?.(cfg.key);
+    });
+    sourceButtons.push({ key: cfg.key, button: btn, handlerId });
+    sourcePillsBox.add_child(btn);
+  }
+  sourceSectionBox.add_child(sourcePillsBox);
+  cardBox.add_child(sourceSectionBox);
+
+  const cardItem = new PopupMenu.PopupBaseMenuItem({
+    reactive: false,
+    can_focus: false,
+    style_class: 'lyricbar-details-card-item',
+  });
+  cardItem.add_child(cardBox);
+  section.addMenuItem(cardItem);
 
   // --- Separator ---
   section.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
@@ -196,7 +262,11 @@ export function buildDetailsMenu(menu, actions) {
   setOrientation(lyricsBox, true);
   setScrollChild(scrollView, lyricsBox);
 
-  const lyricsItem = new PopupMenu.PopupBaseMenuItem({ reactive: false, can_focus: false });
+  const lyricsItem = new PopupMenu.PopupBaseMenuItem({
+    reactive: false,
+    can_focus: false,
+    style_class: 'lyricbar-details-lyrics-item',
+  });
   lyricsItem.add_child(scrollView);
   section.addMenuItem(lyricsItem);
 
@@ -353,7 +423,7 @@ export function buildDetailsMenu(menu, actions) {
 
       if (state.lyrics !== currentLyrics) {
         currentLyrics = state.lyrics;
-        lineLabels = rebuildLyricLabels(lyricsBox, state.lyrics);
+        lineLabels = rebuildLyricLabels(lyricsBox, state.lyrics, actions, () => seekEnabled);
         activeLabelIndex = -1;
       }
 
@@ -363,9 +433,31 @@ export function buildDetailsMenu(menu, actions) {
         activeLabelIndex = nextActive;
         scrollToLine(lyricsBox, scrollView, activeLabelIndex);
       }
+
+      const activeSource = state.lyricsSource ?? 'musixmatch';
+      for (const entry of sourceButtons) {
+        if (entry.key === activeSource) {
+          addStyleClass(entry.button, 'lyricbar-details-source-pill-active');
+        } else {
+          removeStyleClass(entry.button, 'lyricbar-details-source-pill-active');
+        }
+      }
+
+      const resolved = state.resolvedProvider ?? state.lyrics?.source ?? null;
+      if (resolved) {
+        setLabelText(sourceBadgeLabel, `● ${resolved}`);
+        setActorVisible(sourceBadgeLabel, true);
+      } else {
+        setLabelText(sourceBadgeLabel, '');
+        setActorVisible(sourceBadgeLabel, false);
+      }
     },
 
     destroy() {
+      for (const entry of sourceButtons) {
+        disconnectSafely(entry.button, entry.handlerId);
+      }
+
       disconnectSafely(prevButton, prevClickedId);
       disconnectSafely(playPauseButton, playPauseClickedId);
       disconnectSafely(nextButton, nextClickedId);
@@ -452,13 +544,15 @@ function resolveArtGicon(artUrl) {
 }
 
 /**
- * Replace the lyric labels with one per line, returning them in order.
+ * Replace the lyric labels with interactive buttons per line, returning them in order.
  *
  * @param {any} lyricsBox
  * @param {SyncedLyrics | null} lyrics
+ * @param {DetailsMenuActions} actions
+ * @param {() => boolean} getSeekEnabled
  * @returns {any[]}
  */
-function rebuildLyricLabels(lyricsBox, lyrics) {
+function rebuildLyricLabels(lyricsBox, lyrics, actions, getSeekEnabled) {
   destroyChildren(lyricsBox);
 
   const lines = lyrics?.lines ?? [];
@@ -473,16 +567,32 @@ function rebuildLyricLabels(lyricsBox, lyrics) {
   }
 
   /** @type {any[]} */
-  const labels = [];
+  const buttons = [];
   for (const line of lines) {
-    const label = new St.Label({
+    const btn = new St.Button({
       style_class: 'lyricbar-details-lyric-line',
-      text: line.text,
+      label: line.text,
+      can_focus: true,
+      reactive: true,
+      x_align: Clutter.ActorAlign.FILL,
+      x_expand: true,
     });
-    lyricsBox.add_child(label);
-    labels.push(label);
+
+    btn.connect('clicked', () => {
+      if (
+        getSeekEnabled() &&
+        typeof line.timeMs === 'number' &&
+        Number.isFinite(line.timeMs) &&
+        line.timeMs >= 0
+      ) {
+        actions.onSeek(line.timeMs);
+      }
+    });
+
+    lyricsBox.add_child(btn);
+    buttons.push(btn);
   }
-  return labels;
+  return buttons;
 }
 
 /**
@@ -833,4 +943,20 @@ function setReactive(button, enabled) {
     return;
   }
   addStyleClass(button, 'lyricbar-details-button-insensitive');
+}
+
+/**
+ * @param {any} actor
+ * @param {boolean} visible
+ * @returns {void}
+ */
+function setActorVisible(actor, visible) {
+  if (!actor) {
+    return;
+  }
+  try {
+    actor.visible = visible;
+  } catch {
+    Reflect.set(actor, 'visible', visible);
+  }
 }
