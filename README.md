@@ -163,7 +163,3 @@ Better Lyrics Bar builds upon and integrates with the work of several fantastic 
 - **[Better Lyrics](https://github.com/boidu/better-lyrics)**: For the community-driven synced lyrics API and rich sync tooling.
 - **[LRCLIB](https://lrclib.net/)**: By [Tran Duc Bach](https://github.com/tranxuanbach), providing an incredible open, keyless, community-maintained synced lyrics platform.
 - **[fikrilal/gnome-lyricbar](https://github.com/fikrilal/gnome-lyricbar)**: By Ahmad Fikril, serving as the original base fork for the GNOME top bar integration.
-
-## License
-
-MIT
