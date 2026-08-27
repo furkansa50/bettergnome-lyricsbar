@@ -3,6 +3,7 @@ import { BLACK_TEXT_COLOR, WHITE_TEXT_COLOR } from '../settings/appearance.js';
 /**
  * @typedef {{
  *   maxWidth: number,
+ *   autoWidth?: boolean,
  *   textAlign: import('../settings/types.js').TextAlign,
  *   textColorMode: import('../settings/types.js').TextColorMode,
  *   customTextColor: string,
@@ -19,7 +20,10 @@ import { BLACK_TEXT_COLOR, WHITE_TEXT_COLOR } from '../settings/appearance.js';
  * @returns {string} The CSS style string.
  */
 export function buildLabelStyleString(options) {
-  let style = `width: ${options.maxWidth}px; min-width: 1px; text-align: ${options.textAlign};`;
+  const widthProp = options.autoWidth
+    ? `max-width: ${options.maxWidth}px; min-width: 1px;`
+    : `width: ${options.maxWidth}px; min-width: 1px;`;
+  let style = `${widthProp} text-align: ${options.textAlign};`;
 
   if (options.textColorMode === 'default' || options.textColorMode === 'white') {
     style += ` color: ${WHITE_TEXT_COLOR};`;

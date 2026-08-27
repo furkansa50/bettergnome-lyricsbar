@@ -12,6 +12,11 @@
       <summary>Maximum label width</summary>
       <description>Maximum width in pixels for the top-bar lyric label.</description>
     </key>
+    <key name="auto-width" type="b">
+      <default>true</default>
+      <summary>Auto width</summary>
+      <description>Automatically adjust label width to fit lyrics text (up to maximum width).</description>
+    </key>
     <key name="text-align" type="s">
       <default>'left'</default>
       <summary>Text alignment</summary>

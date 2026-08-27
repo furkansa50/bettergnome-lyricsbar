@@ -132,17 +132,12 @@ function formatFallbackTrack(track, fallbackMode) {
  * @returns {string | null}
  */
 export function formatTrackText(track) {
-  const artist = normalizeText(track?.artist);
   const title = normalizeText(track?.title);
-
-  if (artist !== '' && title !== '') {
-    return `${artist} - ${title}`;
-  }
-
   if (title !== '') {
     return title;
   }
 
+  const artist = normalizeText(track?.artist);
   if (artist !== '') {
     return artist;
   }

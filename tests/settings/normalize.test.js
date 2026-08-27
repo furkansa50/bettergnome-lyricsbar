@@ -33,6 +33,7 @@ describe('normalizeSettings', () => {
         customTextColor: '#ff007f',
         textShadowEnabled: false,
         glowStrength: 1.5,
+        autoWidth: false,
       }),
     ).toEqual({
       panelPosition: 'left',
@@ -50,6 +51,7 @@ describe('normalizeSettings', () => {
       customTextColor: '#ff007f',
       textShadowEnabled: false,
       glowStrength: 1.5,
+      autoWidth: false,
     });
   });
 
@@ -87,6 +89,7 @@ describe('normalizeSettings', () => {
       customTextColor: '#ffffff',
       textShadowEnabled: true,
       glowStrength: 1.0,
+      autoWidth: true,
     });
   });
 });

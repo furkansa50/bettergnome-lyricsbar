@@ -27,9 +27,8 @@
 }
 
 .lyricbar-details-card {
-  width: 380px;
-  min-width: 380px;
-  max-width: 380px;
+  min-width: 360px;
+  max-width: 440px;
   background-color: rgba(32, 32, 36, 0.96);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 18px;
@@ -238,9 +237,8 @@
 }
 
 .lyricbar-details-lyrics-scroll {
-  width: 380px;
-  min-width: 380px;
-  max-width: 380px;
+  min-width: 360px;
+  max-width: 440px;
   border-radius: 16px;
   background-color: rgba(0, 0, 0, 0.22);
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -254,7 +252,7 @@
 }
 
 .lyricbar-details-lyric-line {
-  text-align: left;
+  text-align: center;
   border-radius: 8px;
   padding: 7px 12px;
   font-size: 0.94em;

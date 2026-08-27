@@ -28,6 +28,7 @@ describe('SettingsAdapter', () => {
       customTextColor: '#ffffff',
       textShadowEnabled: true,
       glowStrength: 1.0,
+      autoWidth: true,
     });
   });
 
@@ -39,16 +40,16 @@ describe('SettingsAdapter', () => {
 
     adapter.subscribe(callback);
 
-    expect(backend.connect).toHaveBeenCalledTimes(15);
+    expect(backend.connect).toHaveBeenCalledTimes(16);
     backend.emit('changed::max-width');
 
     expect(callback).toHaveBeenCalledWith(adapter.read());
 
     lifecycle.dispose();
 
-    expect(backend.disconnect).toHaveBeenCalledTimes(15);
-    expect(backend.disconnect).toHaveBeenNthCalledWith(1, 15);
-    expect(backend.disconnect).toHaveBeenNthCalledWith(15, 1);
+    expect(backend.disconnect).toHaveBeenCalledTimes(16);
+    expect(backend.disconnect).toHaveBeenNthCalledWith(1, 16);
+    expect(backend.disconnect).toHaveBeenNthCalledWith(16, 1);
   });
 
   it('sets lyrics source on the underlying settings backend', () => {
@@ -99,7 +100,10 @@ function createSettingsBackend(overrides = {}) {
     get_double: vi.fn(() => 1.0),
     get_boolean: vi.fn(
       (key) =>
-        key === 'cache-enabled' || key === 'show-settings-icon' || key === 'style-text-shadow',
+        key === 'auto-width' ||
+        key === 'cache-enabled' ||
+        key === 'show-settings-icon' ||
+        key === 'style-text-shadow',
     ),
     connect: vi.fn((signal, callback) => {
       const signalHandlers = handlers.get(signal) ?? [];

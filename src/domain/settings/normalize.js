@@ -15,6 +15,7 @@ const DEFAULT_PLAYER_PRIORITY = ['spotify'];
 const DEFAULT_BROWSER_PLAYER_SERVICE = 'auto';
 const DEFAULT_LYRICS_SOURCE = 'musixmatch';
 const DEFAULT_TEXT_ALIGN = 'left';
+const DEFAULT_AUTO_WIDTH = true;
 const DEFAULT_HIDE_WHEN_IDLE = true;
 const DEFAULT_GLOW_STRENGTH = 1.0;
 const MIN_GLOW_STRENGTH = 0.0;
@@ -66,6 +67,7 @@ export function normalizeSettings(raw) {
     customTextColor: normalizeCustomTextColor(raw.customTextColor),
     textShadowEnabled: normalizeBoolean(raw.textShadowEnabled, DEFAULT_TEXT_SHADOW_ENABLED),
     glowStrength: normalizeGlowStrength(raw.glowStrength),
+    autoWidth: normalizeBoolean(raw.autoWidth, DEFAULT_AUTO_WIDTH),
   };
 }
 

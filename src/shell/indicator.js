@@ -33,7 +33,8 @@ class LyricBarIndicatorBase extends PanelMenu.Button {
      * re-measured constantly shifts its neighbours around.
      *
      * @type {{ text: string | null, style: string | null, width: number | null,
-     *   ellipsize: number | null, align: string | null, visible: boolean | null } | null}
+     *   ellipsize: number | null, align: string | null, visible: boolean | null,
+     *   autoWidth: boolean | null } | null}
      */
     this._applied = {
       text: null,
@@ -42,6 +43,7 @@ class LyricBarIndicatorBase extends PanelMenu.Button {
       ellipsize: null,
       align: null,
       visible: null,
+      autoWidth: null,
     };
 
     this._lyricBarBox = new St.BoxLayout({
@@ -88,10 +90,17 @@ class LyricBarIndicatorBase extends PanelMenu.Button {
       setLabelText(this._lyricBarLabel, viewModel.text);
     }
 
-    // Pango.EllipsizeMode: 0=NONE, 3=END. Width is pinned to maxWidth and ellipsized.
-    const width = viewModel.maxWidth;
+    // Pango.EllipsizeMode: 0=NONE, 3=END.
+    // In auto-width mode, actor width is unpinned (-1) to size naturally up to maxWidth.
+    // In fixed mode, width is pinned to maxWidth.
+    const width = viewModel.autoWidth ? -1 : viewModel.maxWidth;
     const ellipsize = 3;
     let geometryChanged = false;
+
+    if (applied.autoWidth !== viewModel.autoWidth) {
+      applied.autoWidth = viewModel.autoWidth;
+      geometryChanged = true;
+    }
 
     if (applied.width !== width) {
       applied.width = width;

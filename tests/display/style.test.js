@@ -102,4 +102,34 @@ describe('buildLabelStyleString', () => {
       'width: 360px; min-width: 1px; text-align: left; color: #ffffff; text-shadow: 0 0 8px rgba(255, 255, 255, 0.9), 0 0 16px rgba(255, 255, 255, 0.6), 0 0 24px rgba(255, 255, 255, 0.3);',
     );
   });
+
+  it('builds style string with max-width when autoWidth is true', () => {
+    const result = buildLabelStyleString({
+      maxWidth: 360,
+      autoWidth: true,
+      textAlign: 'left',
+      textColorMode: 'default',
+      customTextColor: '#ffffff',
+      textShadowEnabled: false,
+      glowStrength: 1.0,
+    });
+    expect(result).toBe(
+      'max-width: 360px; min-width: 1px; text-align: left; color: #ffffff; text-shadow: none;',
+    );
+  });
+
+  it('builds style string with fixed width when autoWidth is false', () => {
+    const result = buildLabelStyleString({
+      maxWidth: 360,
+      autoWidth: false,
+      textAlign: 'center',
+      textColorMode: 'default',
+      customTextColor: '#ffffff',
+      textShadowEnabled: false,
+      glowStrength: 1.0,
+    });
+    expect(result).toBe(
+      'width: 360px; min-width: 1px; text-align: center; color: #ffffff; text-shadow: none;',
+    );
+  });
 });

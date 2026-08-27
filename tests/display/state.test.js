@@ -21,7 +21,7 @@ describe('formatDisplayState', () => {
         'track',
       ),
     ).toEqual({
-      text: 'Artist - Song',
+      text: 'Song',
       visible: true,
     });
   });
@@ -36,7 +36,7 @@ describe('formatDisplayState', () => {
         'track',
       ),
     ).toEqual({
-      text: 'Artist - Song',
+      text: 'Song',
       visible: true,
     });
   });
@@ -95,7 +95,7 @@ describe('formatDisplayState', () => {
         'track',
       ),
     ).toEqual({
-      text: 'Loading lyrics: Artist - Song',
+      text: 'Loading lyrics: Song',
       visible: true,
     });
   });
@@ -117,7 +117,7 @@ describe('formatDisplayState', () => {
         'track',
       ),
     ).toEqual({
-      text: 'Artist - Song',
+      text: 'Song',
       visible: true,
     });
   });
@@ -215,6 +215,10 @@ describe('formatDisplayState', () => {
 });
 
 describe('formatTrackText', () => {
+  it('prefers title when both artist and title are present', () => {
+    expect(formatTrackText({ artist: 'Artist', title: 'Song' })).toBe('Song');
+  });
+
   it('uses title when artist is missing', () => {
     expect(formatTrackText({ title: 'Song' })).toBe('Song');
   });

@@ -22,6 +22,7 @@
  *   customTextColor?: unknown,
  *   textShadowEnabled?: unknown,
  *   glowStrength?: unknown,
+ *   autoWidth?: unknown,
  * }>} RawSettings
  *
  * @typedef {Readonly<{
@@ -40,6 +41,7 @@
  *   customTextColor: string,
  *   textShadowEnabled: boolean,
  *   glowStrength: number,
+ *   autoWidth: boolean,
  * }>} LyricBarSettings
  */
 

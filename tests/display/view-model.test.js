@@ -23,6 +23,7 @@ const baseSettings = {
   customTextColor: '#ffffff',
   textShadowEnabled: true,
   glowStrength: 1.0,
+  autoWidth: true,
 };
 
 describe('buildIndicatorViewModel', () => {
@@ -48,6 +49,7 @@ describe('buildIndicatorViewModel', () => {
       glowStrength: 1.0,
       words: [],
       activeWordIndex: -1,
+      autoWidth: true,
     });
   });
 
@@ -74,6 +76,7 @@ describe('buildIndicatorViewModel', () => {
       glowStrength: 1.0,
       words: [],
       activeWordIndex: -1,
+      autoWidth: true,
     });
   });
 });

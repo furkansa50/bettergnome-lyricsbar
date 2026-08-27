@@ -19,6 +19,7 @@ import { normalizeSettings } from '../domain/settings/normalize.js';
 const SETTING_KEYS = [
   'panel-position',
   'max-width',
+  'auto-width',
   'text-align',
   'fallback-mode',
   'show-settings-icon',
@@ -54,6 +55,7 @@ export class SettingsAdapter {
     return normalizeSettings({
       panelPosition: this.#settings.get_string('panel-position'),
       maxWidth: this.#settings.get_int('max-width'),
+      autoWidth: this.#settings.get_boolean('auto-width'),
       textAlign: this.#settings.get_string('text-align'),
       fallbackMode: this.#settings.get_string('fallback-mode'),
       showSettingsIcon: this.#settings.get_boolean('show-settings-icon'),

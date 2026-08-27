@@ -107,6 +107,7 @@ function settings(playerPriority, overrides = {}) {
     customTextColor: '#ffffff',
     textShadowEnabled: true,
     glowStrength: 1.0,
+    autoWidth: true,
     ...overrides,
   };
 }

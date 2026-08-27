@@ -15,6 +15,10 @@ declare module 'gi://Clutter' {
       HORIZONTAL: unknown;
       VERTICAL: unknown;
     };
+    AnimationMode: {
+      EASE_OUT_QUAD: unknown;
+      [key: string]: unknown;
+    };
     EVENT_PROPAGATE: unknown;
     EVENT_STOP: unknown;
   };
@@ -192,6 +196,10 @@ declare module 'gi://St' {
       hscrollbar_policy?: unknown;
       vscrollbar_policy?: unknown;
       style?: string;
+      x_expand?: boolean;
+      y_expand?: boolean;
+      x_align?: unknown;
+      y_align?: unknown;
     });
 
     readonly vadjustment: unknown;

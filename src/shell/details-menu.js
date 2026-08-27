@@ -1,5 +1,6 @@
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 import St from 'gi://St';
 
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
@@ -256,9 +257,13 @@ export function buildDetailsMenu(menu, actions) {
     hscrollbar_policy: St.PolicyType.NEVER,
     vscrollbar_policy: St.PolicyType.AUTOMATIC,
     style: `max-height: ${LYRICS_SCROLL_HEIGHT}px;`,
+    x_expand: true,
   });
 
-  const lyricsBox = new St.BoxLayout({ style_class: 'lyricbar-details-lyrics' });
+  const lyricsBox = new St.BoxLayout({
+    style_class: 'lyricbar-details-lyrics',
+    x_expand: true,
+  });
   setOrientation(lyricsBox, true);
   setScrollChild(scrollView, lyricsBox);
 
@@ -350,16 +355,31 @@ export function buildDetailsMenu(menu, actions) {
 
   // While the popup is closed its actors have no allocation, so the fill width
   // and the scroll offset cannot be computed. Re-apply both on open.
+  let scrollOpenTimeoutId = 0;
+
   const menuStateId =
     typeof menu?.connect === 'function'
       ? menu.connect(
           'open-state-changed',
           (/** @type {unknown} */ _menu, /** @type {boolean} */ open) => {
             if (open !== true) {
+              if (scrollOpenTimeoutId) {
+                GLib.source_remove(scrollOpenTimeoutId);
+                scrollOpenTimeoutId = 0;
+              }
               return;
             }
             applyProgressFill(progressBar, progressFill, progressFraction);
             scrollToLine(lyricsBox, scrollView, activeLabelIndex);
+
+            if (scrollOpenTimeoutId) {
+              GLib.source_remove(scrollOpenTimeoutId);
+            }
+            scrollOpenTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 80, () => {
+              scrollOpenTimeoutId = 0;
+              scrollToLine(lyricsBox, scrollView, activeLabelIndex);
+              return GLib.SOURCE_REMOVE;
+            });
           },
         )
       : 0;
@@ -456,6 +476,11 @@ export function buildDetailsMenu(menu, actions) {
     destroy() {
       for (const entry of sourceButtons) {
         disconnectSafely(entry.button, entry.handlerId);
+      }
+
+      if (scrollOpenTimeoutId) {
+        GLib.source_remove(scrollOpenTimeoutId);
+        scrollOpenTimeoutId = 0;
       }
 
       disconnectSafely(prevButton, prevClickedId);
@@ -659,18 +684,110 @@ function scrollToLine(lyricsBox, scrollView, activeIndex) {
       return;
     }
 
+    let pageSize = readNumber(adjustment, 'get_page_size', 'page_size', 0);
+    if (!Number.isFinite(pageSize) || pageSize <= 0) {
+      const scrollH = readNumber(scrollView, 'get_height', 'height', 0);
+      pageSize = scrollH > 0 ? scrollH : LYRICS_SCROLL_HEIGHT;
+    }
+
+    let childY = 0;
+    let childHeight = ESTIMATED_LINE_HEIGHT;
+
+    const box =
+      typeof activeChild.get_allocation_box === 'function'
+        ? activeChild.get_allocation_box()
+        : null;
+    if (box) {
+      const y1 = typeof box.get_y1 === 'function' ? box.get_y1() : box.y1;
+      const y2 = typeof box.get_y2 === 'function' ? box.get_y2() : box.y2;
+      if (typeof y1 === 'number' && Number.isFinite(y1) && (y1 > 0 || activeIndex === 0)) {
+        childY = y1;
+      }
+      if (typeof y2 === 'number' && Number.isFinite(y2) && y2 > y1) {
+        childHeight = y2 - y1;
+      }
+    }
+
+    // Fallback if allocation coordinates are not yet available:
+    if (childY === 0 && activeIndex > 0) {
+      let accumulatedY = 0;
+      for (let i = 0; i < activeIndex; i++) {
+        const prev = children[i];
+        let h = 0;
+        if (typeof prev?.get_allocation_box === 'function') {
+          const pb = prev.get_allocation_box();
+          const py1 = typeof pb.get_y1 === 'function' ? pb.get_y1() : pb?.y1;
+          const py2 = typeof pb.get_y2 === 'function' ? pb.get_y2() : pb?.y2;
+          if (typeof py1 === 'number' && typeof py2 === 'number' && py2 > py1) {
+            h = py2 - py1;
+          }
+        }
+        if (h <= 0) {
+          h = readNumber(prev, 'get_height', 'height', 0);
+        }
+        if (h <= 0) {
+          h = 32;
+        }
+        accumulatedY += h + 3; // 3px vertical spacing in lyricsBox
+      }
+      childY = accumulatedY;
+    }
+
+    if (childHeight <= 0 || childHeight === ESTIMATED_LINE_HEIGHT) {
+      const directH = readNumber(activeChild, 'get_height', 'height', 0);
+      if (directH > 0) {
+        childHeight = directH;
+      } else {
+        childHeight = 32;
+      }
+    }
+
+    let upper = readNumber(adjustment, 'get_upper', 'upper', 0);
+    if (!Number.isFinite(upper) || upper <= 0) {
+      const boxH = readNumber(lyricsBox, 'get_height', 'height', 0);
+      upper = boxH > 0 ? boxH : children.length * 35;
+    }
+
     const value = computeScrollValue({
-      childY: readNumber(activeChild, 'get_y', 'y', 0),
-      childHeight: readNumber(activeChild, 'get_height', 'height', ESTIMATED_LINE_HEIGHT),
-      pageSize: readNumber(adjustment, 'get_page_size', 'page_size', 0),
-      upper: readNumber(adjustment, 'get_upper', 'upper', 0),
+      childY,
+      childHeight,
+      pageSize,
+      upper,
     });
 
     if (value !== null) {
-      adjustment.set_value(value);
+      if (typeof adjustment.ease === 'function') {
+        try {
+          adjustment.ease(value, {
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            duration: 250,
+          });
+        } catch {
+          setAdjustmentValue(adjustment, value);
+        }
+      } else {
+        setAdjustmentValue(adjustment, value);
+      }
     }
   } catch {
     // scroll adjustment not available yet; non-critical
+  }
+}
+
+/**
+ * @param {any} adjustment
+ * @param {number} value
+ * @returns {void}
+ */
+function setAdjustmentValue(adjustment, value) {
+  if (typeof adjustment.set_value === 'function') {
+    adjustment.set_value(value);
+    return;
+  }
+  try {
+    adjustment.value = value;
+  } catch {
+    Reflect.set(adjustment, 'value', value);
   }
 }
 
@@ -682,6 +799,13 @@ function scrollToLine(lyricsBox, scrollView, activeIndex) {
  * @returns {any}
  */
 function readVerticalAdjustment(scrollView) {
+  if (typeof scrollView?.get_vadjustment === 'function') {
+    const direct = scrollView.get_vadjustment();
+    if (direct !== null && direct !== undefined) {
+      return direct;
+    }
+  }
+
   const direct = Reflect.get(scrollView, 'vadjustment');
   if (direct !== null && direct !== undefined) {
     return direct;
