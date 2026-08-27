@@ -6,3 +6,9 @@ coverage/
 .zcode/
 *.log
 .claude/settings.local.json
+.engineering
+.completed
+.harness
+.operations
+.players
+.release-notes
