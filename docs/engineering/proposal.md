@@ -56,18 +56,15 @@ MPRIS provides:
 
 LyricBar should not depend on Spotify-specific desktop internals. Spotify support should be achieved through Spotify's MPRIS implementation.
 
-### Lyrics Provider
+### Lyrics Providers
 
-The default lyrics provider should be **LRCLIB**.
+Better Lyrics Bar implements a multi-tier provider pipeline supporting three distinct services:
 
-LRCLIB is suitable for v1 because:
+1. **Musixmatch Open Desktop API**: Queries `apic-desktop.musixmatch.com` via `token.get` and `macro.subtitles.get` to retrieve rich word-by-word (`RichSync`) and line-by-line (`LRC`) timestamps.
+2. **Better Lyrics API**: Queries `lyrics.boidu.dev` for community-curated synchronized lyrics and TTML/RichSync structures.
+3. **LRCLIB**: Fast, public, open-source, and keyless database (`lrclib.net`) providing line-by-line LRC lyrics and plain text fallback.
 
-- It provides synced lyrics when available.
-- It does not require an API key.
-- It supports simple metadata-based lookup.
-- It is easy to document from a privacy perspective.
-
-The provider layer should be abstracted enough that another lyrics source can be added later without rewriting the extension runtime.
+The pipeline cascades gracefully: Musixmatch ➔ Better Lyrics ➔ LRCLIB. Users can also select their preferred default provider in Preferences or on-the-fly via the top-bar popup menu.
 
 ## Architecture
 
@@ -347,20 +344,43 @@ Responsibilities:
 - expose lyric timeline
 - handle negative lookups and provider failures
 
-### `src/lyrics/lrclib.js`
+### `src/runtime/lyrics/musixmatch.js`
+
+Musixmatch open desktop provider adapter.
+
+Responsibilities:
+
+- fetch anonymous session tokens via `token.get`
+- query word-level and line-level lyrics via `macro.subtitles.get`
+- parse RichSync and subtitle payloads into domain-neutral provider results
+
+### `src/runtime/lyrics/better-lyrics.js`
+
+Better Lyrics API adapter and multi-tier orchestrator.
+
+Responsibilities:
+
+- query `lyrics.boidu.dev` for rich synced lyrics
+- orchestrate the multi-tier cascade (Musixmatch ➔ Better Lyrics ➔ LRCLIB)
+- parse TTML/RichSync structures into unified word and line timelines
+
+### `src/runtime/lyrics/lrclib.js`
 
 LRCLIB provider adapter.
 
 Responsibilities:
 
-- build API requests
-- apply request timeout
-- parse provider responses
-- return provider-neutral results
+- build LRCLIB API requests (`get` and `search`)
+- apply request timeout and handle errors
+- parse LRC timestamps and return provider-neutral results
 
-### `src/lyrics/lrc.js`
+### `src/domain/lyrics/`
 
-Pure LRC parser and lyric selection logic.
+Pure lyric parsing domain modules:
+
+- `musixmatch.js`: parses Musixmatch RichSync JSON and macro responses
+- `ttml.js`: parses TTML XML structures and converts word timing to lyric models
+- `lrc.js`: parses standard LRC timestamped lines and plain text fallback
 
 Responsibilities:
 

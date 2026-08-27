@@ -1,8 +1,8 @@
 # Better Lyrics Bar
 
-Better Lyrics Bar is a GNOME Shell extension that displays synchronized live lyrics in the top bar for MPRIS-compatible music players.
+Better Lyrics Bar is a production-grade GNOME Shell extension that displays synchronized live lyrics directly in the top bar for MPRIS-compatible music players.
 
-It is built for GNOME Shell 46–50 and supports Spotify Desktop, Spotify Web, YouTube Music Web, Apple Music Web, and other MPRIS players. Features include word-by-word synced lyrics, a multi-provider fallback engine (Musixmatch, Better Lyrics, LRCLIB), dynamic auto-width, and an interactive song details popup.
+It is built for GNOME Shell 46–50 and supports Spotify Desktop, Spotify Web, YouTube Music Web, Apple Music Web, and other MPRIS players. Features include word-by-word synced lyrics, a multi-tier provider pipeline (**Musixmatch**, **Better Lyrics API**, and **LRCLIB**), dynamic auto-width, and an interactive song details popup menu.
 
 ![Better Lyrics Bar screenshot](docs/assets/lyricbar-panel.png)
 
@@ -10,13 +10,46 @@ It is built for GNOME Shell 46–50 and supports Spotify Desktop, Spotify Web, Y
 
 ## Features
 
-- **Word-by-Word Synced Lyrics**: Real-time word highlighting and line tracking with smooth CSS transitions and glow effects.
-- **Multi-Provider Pipeline**: Intelligent lyric lookup cascading across Musixmatch (RichSync and LRC), Better Lyrics API, and LRCLIB with local caching.
-- **Dynamic Auto-Width**: Top-bar label automatically adjusts width to fit lyric text up to a configurable maximum width.
-- **Interactive Details Popup**: Click the top bar indicator to view track artwork, artist/album metadata, playback controls (Play/Pause, Next, Previous), a seek slider, volume control, and active lyrics source switcher.
-- **Broad MPRIS Player Support**: Seamless integration with Spotify Desktop, Spotify Web, YouTube Music Web, Apple Music Web, and generic MPRIS media players.
-- **Deep Customization**: Preferences for text color (system, presets, or custom HEX), text shadow and glow intensity, panel position (left, center, right), text alignment, fallback mode, and cache toggles.
-- **Robust Shell Architecture**: Isolated domain logic, guarded async callbacks, and strict lifecycle cleanup on disable.
+- **Word-by-Word Synced Lyrics**: Real-time word-level highlighting with fluid CSS transitions and customizable text glow effects.
+- **Multi-Provider Engine**: Unified pipeline integrating **Musixmatch**, **Better Lyrics API**, and **LRCLIB** with local caching and offline retrieval.
+- **Dynamic Auto-Width**: The top-bar indicator smoothly resizes to fit current lyrics without awkward clipping or layout jitter.
+- **Interactive Song Details Menu**: Click the top-bar lyric indicator to reveal track cover art, artist/album metadata, playback controls (Play/Pause, Next, Previous), seek bar, volume control, and active lyrics source switcher.
+- **Broad MPRIS Player Support**: Native integration with Spotify Desktop, Spotify Web, YouTube Music Web, Apple Music Web, and generic MPRIS players.
+- **Deep Customization**: Preferences for typography styling (system default, presets, custom HEX color picker), glow strength, drop shadow, text alignment, and panel placement.
+- **Defensive Shell Architecture**: Pure domain modules, strict resource cleanup on disable, and guarded asynchronous callbacks.
+
+## Lyrics Providers & Sync Architecture
+
+Better Lyrics Bar integrates three prominent lyrics services into an intelligent cascading pipeline:
+
+### 1. Musixmatch Open Desktop API (RichSync & LRC)
+
+- **Precision**: Syllable- and word-by-word synchronized timestamps (`RichSync`), as well as line-synced lyrics (`LRC`).
+- **How it works**: Queries Musixmatch's public desktop endpoints (`apic-desktop.musixmatch.com/ws/1.1/`) via automated user-token discovery (`token.get`) and macro calls (`macro.subtitles.get`).
+- **Capabilities**: Delivers the highest precision word-timing data available, enabling real-time karaoke-style lyric transitions in the GNOME panel.
+
+### 2. Better Lyrics API
+
+- **Precision**: Word-synced (`RichSync`/`TTML`) and line-synced lyrics.
+- **How it works**: Interfaces with the community-driven Better Lyrics service (`lyrics.boidu.dev`), retrieving pre-synced rich subtitle structures for popular catalog tracks.
+- **Capabilities**: High-speed, lightweight lookups with zero authentication friction.
+
+### 3. LRCLIB
+
+- **Precision**: Standard line-by-line synced lyrics (`LRC`) and plain text fallback.
+- **How it works**: Direct integration with the free, public, keyless, and open-source lyrics database ([lrclib.net](https://lrclib.net/)).
+- **Capabilities**: Massive open catalog, reliable community-curated timestamps, and resilient fallback when rich word timestamps are not present.
+
+### Multi-Tier Fallback Cascade
+
+By default (`lyrics-source: 'musixmatch'`), Better Lyrics Bar queries providers in priority order:
+
+1. **Musixmatch** is queried first for high-precision word-by-word `RichSync` timestamps.
+2. If Musixmatch has no result or encounters an error, the **Better Lyrics API** is checked.
+3. If neither returns synced lyrics, **LRCLIB** is queried as the final fallback for line-synced or plain text.
+4. When synced lyrics are unavailable across all sources, the extension falls back according to user preferences (`track`, `idle`, or `hidden`).
+
+Users can easily lock their preferred provider on-the-fly using the top-bar popup menu or through **Preferences → Lyrics source** (`musixmatch`, `better-lyrics`, or `lrclib`).
 
 ## Compatibility
 
@@ -97,7 +130,7 @@ The generated release bundle is written to `dist/betterlyricsbar@furkansa50.zip`
 
 ## Privacy
 
-Better Lyrics Bar does not use telemetry and does not require account credentials. For lyric lookups, track metadata (artist, title, album, duration) is queried against public lyrics services. See [Privacy](docs/privacy.md).
+Better Lyrics Bar does not use telemetry and does not require account credentials. For lyric lookups, track metadata (artist, title, album, duration) is queried against the configured public lyrics services (Musixmatch, Better Lyrics, LRCLIB). No personal browsing history or account identifiers are ever transmitted. See [Privacy](docs/privacy.md).
 
 ## Troubleshooting
 
@@ -115,7 +148,12 @@ If the panel is blank, lyrics do not sync, or the wrong player is selected, see 
 
 ## Acknowledgements
 
-Better Lyrics Bar is a fork of [fikrilal/gnome-lyricbar](https://github.com/fikrilal/gnome-lyricbar) with word-by-word sync, Musixmatch integration, auto-width indicator, details popup menu, and extensive enhancements.
+Better Lyrics Bar builds upon and integrates with the work of several fantastic open-source projects and services:
+
+- **[Musixmatch](https://www.musixmatch.com/)**: For the extensive catalog of rich synchronized lyrics and subtitles.
+- **[Better Lyrics](https://github.com/boidu/better-lyrics)**: For the community-driven synced lyrics API and rich sync tooling.
+- **[LRCLIB](https://lrclib.net/)**: By [Tran Duc Bach](https://github.com/tranxuanbach), providing an incredible open, keyless, community-maintained synced lyrics platform.
+- **[fikrilal/gnome-lyricbar](https://github.com/fikrilal/gnome-lyricbar)**: By Ahmad Fikril, serving as the original base fork for the GNOME top bar integration.
 
 ## License
 

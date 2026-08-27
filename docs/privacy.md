@@ -1,44 +1,72 @@
 # Privacy
 
-LyricBar is a local GNOME Shell extension. It does not include telemetry, analytics, advertising identifiers, or account integration.
+Better Lyrics Bar is a local GNOME Shell extension. It does not include telemetry, analytics, tracking beacons, advertising identifiers, or account authentication.
 
 ## Data Sources
 
-LyricBar reads playback state from the local MPRIS session bus. MPRIS data can include:
+Better Lyrics Bar reads playback state exclusively from the local Linux MPRIS session bus. MPRIS data can include:
 
 - player bus name
-- playback status
+- playback status (Playing, Paused, Stopped)
 - track title
 - artist
 - album
 - track duration
 - playback position
 
-This data is already exposed locally by the active media player to desktop integrations.
+This data is already broadcast locally on your desktop by the active media player to desktop integrations.
 
 ## Network Requests
 
-LyricBar uses LRCLIB to look up synced lyrics. A lookup can send track metadata to LRCLIB, including:
+To look up and synchronize live lyrics, Better Lyrics Bar queries public lyrics providers based on the user's configuration:
 
-- artist
-- title
-- album, when available
-- duration, when available
+### 1. Musixmatch Open Desktop API
 
-LyricBar does not send Spotify account data, playlists, listening history, local usernames, or desktop screenshots.
+- **Endpoint**: `https://apic-desktop.musixmatch.com/ws/1.1/`
+- **Requests**:
+  - `token.get`: Requests an anonymous session token for query signing.
+  - `macro.subtitles.get`: Requests word-by-word `RichSync` timestamps and standard synced subtitles.
+- **Transmitted Data**: Track title, artist name, and duration.
+
+### 2. Better Lyrics API
+
+- **Endpoint**: `https://lyrics.boidu.dev/`
+- **Requests**: Looks up synchronized rich lyrics and TTML formats.
+- **Transmitted Data**: Track title, artist name, and duration.
+
+### 3. LRCLIB
+
+- **Endpoint**: `https://lrclib.net/api/`
+- **Requests**: Looks up line-synced `LRC` and plain text lyrics from the open database.
+- **Transmitted Data**: Track title, artist name, album name, and duration.
+
+### Data Guarantees
+
+Better Lyrics Bar **never** sends:
+
+- Spotify account data, credentials, cookies, or auth tokens.
+- User playlists, listening histories, or profile info.
+- Local usernames, hostnames, IP logs, or system identifiers.
+- Screenshots, window contents, or browser tabs.
 
 ## Cache
 
-LyricBar caches lyric lookup results locally when `cache-enabled` is true. The cache is used to reduce repeat network lookups and improve startup behavior for tracks that have already been played.
+Better Lyrics Bar caches lyric lookup results locally when `cache-enabled` is true. The cache is stored locally in the user's state directory (`~/.local/state/betterlyricsbar/`) to reduce duplicate network requests, minimize provider latency, and support offline playback for repeated tracks.
 
-Disable cache from preferences if local lyric metadata storage is not desired.
+Disable the cache in Preferences if local storage of lyric text is not desired.
 
 ## Debug Logs
 
-Debug logging is off by default. When enabled, LyricBar writes diagnostic GNOME Shell log messages that can include track titles, artists, player bus names, lookup outcomes, and selected lyric lines.
+Debug logging is disabled by default. When enabled, Better Lyrics Bar writes diagnostic GNOME Shell log messages that can include track titles, artists, player bus names, lookup outcomes, and selected lyric lines to the system journal.
 
-Use debug logging only while troubleshooting.
+Enable debug logging only when diagnosing issues.
 
 ## Third Parties
 
-Lyric lookup is provided by LRCLIB. Users should review LRCLIB's own policies before enabling network-backed lyric lookup in environments with strict privacy requirements.
+Lyric lookup requests are sent directly from your machine to:
+
+- **Musixmatch**: [musixmatch.com/privacy](https://www.musixmatch.com/privacy)
+- **Better Lyrics**: [github.com/boidu/better-lyrics](https://github.com/boidu/better-lyrics)
+- **LRCLIB**: [lrclib.net](https://lrclib.net/)
+
+Users should review third-party policies when using the extension in environments with strict network filtering or external lookup restrictions.

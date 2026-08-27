@@ -1,6 +1,6 @@
-# LyricBar Documentation
+# Better Lyrics Bar Documentation
 
-This directory is the source of truth for LyricBar product direction, engineering rules, harness design, and execution plans.
+This directory is the source of truth for Better Lyrics Bar product direction, engineering rules, harness design, and execution plans.
 
 ## Start Here
 
