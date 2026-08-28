@@ -85,7 +85,7 @@ describe('buildLabelStyleString', () => {
       words: [{ beginMs: 1000, endMs: 2000, text: 'Hello' }],
     });
     expect(result).toBe(
-      `width: 360px; min-width: 1px; text-align: left; color: #ffffff; text-shadow: ${GLOW_SHADOW};`,
+      `width: 360px; min-width: 1px; text-align: left; text-shadow: ${GLOW_SHADOW};`,
     );
   });
 

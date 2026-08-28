@@ -180,6 +180,20 @@ describe('shouldHoldLowConfidenceSyncedPosition', () => {
       ),
     ).toBe(true);
   });
+
+  it('holds zero-position samples when playback is paused and a position was accepted', () => {
+    expect(
+      shouldHoldLowConfidenceSyncedPosition(
+        browserSnapshot({
+          playbackStatus: 'Paused',
+        }),
+        0,
+        {
+          hasAcceptedSyncedPosition: true,
+        },
+      ),
+    ).toBe(true);
+  });
 });
 
 /**

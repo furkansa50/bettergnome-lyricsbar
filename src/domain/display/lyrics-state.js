@@ -36,7 +36,7 @@ export function displayStateFromLookup(player, lookup, options = {}) {
   }
 
   switch (lookup.kind) {
-    case 'synced':
+    case 'synced': {
       // A known position must win over the first line of the song. Painting
       // `lines[0]` while playback is already underway is the "lyrics show up
       // late" symptom: the correct line only arrived on the next poll tick.
@@ -49,13 +49,18 @@ export function displayStateFromLookup(player, lookup, options = {}) {
       ) {
         return options.previousState;
       }
+      const firstLine = extractFirstSyncedLine(lookup);
+      const firstWordLine =
+        lookup.wordLines && lookup.wordLines.length > 0 ? lookup.wordLines[0] : null;
+      const words = firstWordLine && firstWordLine.text === firstLine ? firstWordLine.words : [];
       return {
         kind: 'lyrics',
-        line: extractFirstSyncedLine(lookup),
-        words: [],
+        line: firstLine,
+        words,
         activeWordIndex: -1,
         track,
       };
+    }
     case 'plain':
       return {
         kind: 'lyrics',
@@ -103,29 +108,22 @@ export function displayStateFromSyncedPosition(player, lookup, positionMs) {
 
   const firstLine = lookup.lines[0];
   if (firstLine && positionMs < firstLine.timeMs) {
-    if (player.album && player.album.trim() !== '') {
-      return {
-        kind: 'lyrics',
-        line: player.album,
-        words: [],
-        activeWordIndex: -1,
-        track,
-      };
-    }
+    return {
+      kind: 'track',
+      track,
+    };
   }
 
   // One selection pass shared with selectSyncedHighlight, so the cheap
   // change-detection callers do and the state built here can never disagree.
   const highlight = selectSyncedHighlight(lookup, positionMs);
-  const line = highlight.lineIndex === -1 ? null : (lookup.lines[highlight.lineIndex] ?? null);
   const wordLine =
-    highlight.wordLineIndex === -1 ? null : (lookup.wordLines[highlight.wordLineIndex] ?? null);
+    highlight.wordLineIndex === -1 ? null : (lookup.wordLines?.[highlight.wordLineIndex] ?? null);
 
-  // If a word-timed line applies and is not superseded by a newer plain line,
-  // use the word-timed line's text and word highlight so it never swaps
-  // between word markup and plain text within a single line or inter-line gap.
-  if (wordLine !== null && (line === null || wordLine.timeMs >= line.timeMs)) {
-    if (wordLine.text.trim() !== '') {
+  // If we have word timings, we must not fall back to plain un-highlighted lines
+  // during gaps, as this causes the entire line to flash bright white.
+  if (lookup.wordLines && lookup.wordLines.length > 0) {
+    if (wordLine !== null && wordLine.text.trim() !== '') {
       return {
         kind: 'lyrics',
         line: wordLine.text,
@@ -134,8 +132,10 @@ export function displayStateFromSyncedPosition(player, lookup, positionMs) {
         track,
       };
     }
+    return { kind: 'track', track };
   }
 
+  const line = highlight.lineIndex === -1 ? null : (lookup.lines[highlight.lineIndex] ?? null);
   if (line !== null && line.text.trim() !== '') {
     return { kind: 'lyrics', line: line.text, words: [], activeWordIndex: -1, track };
   }
@@ -233,7 +233,8 @@ export function selectActiveWordIndex(wordLine, positionMs) {
     return words.length;
   }
 
-  return lastIndexAtOrBefore(words, positionMs, readWordBeginMs);
+  const index = lastIndexAtOrBefore(words, positionMs, readWordBeginMs);
+  return Math.max(0, index);
 }
 
 /**

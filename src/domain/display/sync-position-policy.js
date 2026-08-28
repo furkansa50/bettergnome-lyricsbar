@@ -70,14 +70,16 @@ export function shouldHoldLowConfidenceSyncedPosition(player, positionMs, option
     player === null ||
     player === undefined ||
     positionMs !== 0 ||
-    (options.hasPreviousSyncedLine !== true && options.hasAcceptedSyncedPosition !== true) ||
-    player.playbackStatus !== 'Playing' ||
-    !isFirefoxBrowser(player.busName)
+    (options.hasPreviousSyncedLine !== true && options.hasAcceptedSyncedPosition !== true)
   ) {
     return false;
   }
 
-  return true;
+  if (player.playbackStatus === 'Paused') {
+    return true;
+  }
+
+  return isFirefoxBrowser(player.busName);
 }
 
 /**

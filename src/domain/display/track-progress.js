@@ -99,6 +99,86 @@ export function computeTargetSetPositionMs(displayPositionMs, syncPositionOffset
 }
 
 /**
+ * @typedef {Readonly<{
+ *   method: 'set-position',
+ *   trackId: string,
+ *   targetMs: number,
+ * }> | Readonly<{
+ *   method: 'seek-offset',
+ *   offsetMs: number,
+ * }> | Readonly<{
+ *   method: 'none',
+ *   reason: string,
+ * }>} SeekAction
+ */
+
+/**
+ * Determines whether to use SetPosition (absolute) or Seek (relative offset)
+ * when seeking to a target position.
+ *
+ * Spotify Desktop Linux client does not implement SetPosition properly, so relative
+ * Seek(offset) is used when current position is known.
+ *
+ * For all other players (notably browsers like Firefox and Chrome, and standard desktop players),
+ * SetPosition is the official MPRIS standard for absolute seeks. Browsers map relative
+ * Seek(offset) to fixed-step seekbackward/seekforward actions (typically 5s or 10s),
+ * which breaks jumping to specific lyric lines or progress points.
+ *
+ * @param {Readonly<{
+ *   busName?: string | null | undefined,
+ *   trackId?: string | null | undefined,
+ *   currentPositionMs?: number | null | undefined,
+ *   syncPositionOffsetMs?: number | null | undefined,
+ * }>} params
+ * @param {number} targetPositionMs
+ * @returns {SeekAction}
+ */
+export function determineSeekAction(params, targetPositionMs) {
+  if (
+    typeof targetPositionMs !== 'number' ||
+    !Number.isFinite(targetPositionMs) ||
+    targetPositionMs < 0
+  ) {
+    return { method: 'none', reason: 'invalid-target-position' };
+  }
+
+  const isSpotifyDesktop = params.busName === 'org.mpris.MediaPlayer2.spotify';
+  const trackId =
+    typeof params.trackId === 'string' && params.trackId.trim() !== ''
+      ? params.trackId.trim()
+      : null;
+  const currentMs =
+    typeof params.currentPositionMs === 'number' && Number.isFinite(params.currentPositionMs)
+      ? params.currentPositionMs
+      : null;
+
+  if (isSpotifyDesktop && currentMs !== null) {
+    return {
+      method: 'seek-offset',
+      offsetMs: targetPositionMs - currentMs,
+    };
+  }
+
+  if (trackId !== null) {
+    const targetMs = computeTargetSetPositionMs(targetPositionMs, params.syncPositionOffsetMs);
+    return {
+      method: 'set-position',
+      trackId,
+      targetMs,
+    };
+  }
+
+  if (currentMs !== null) {
+    return {
+      method: 'seek-offset',
+      offsetMs: targetPositionMs - currentMs,
+    };
+  }
+
+  return { method: 'none', reason: 'no-track-id-and-no-known-position' };
+}
+
+/**
  * Fraction of the bar a pointer press landed on.
  *
  * @param {number} localX Pointer x relative to the bar's own origin.

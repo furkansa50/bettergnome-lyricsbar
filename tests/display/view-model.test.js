@@ -79,4 +79,49 @@ describe('buildIndicatorViewModel', () => {
       autoWidth: true,
     });
   });
+
+  it('suppresses word-by-word timing when autoWidth is true to prevent panel jitter', () => {
+    const wordTimedState = {
+      kind: /** @type {const} */ ('lyrics'),
+      line: 'Hello world',
+      words: [
+        { text: 'Hello', timeMs: 1000, durationMs: 500 },
+        { text: 'world', timeMs: 1500, durationMs: 500 },
+      ],
+      activeWordIndex: 0,
+    };
+
+    const vm = buildIndicatorViewModel(wordTimedState, {
+      ...baseSettings,
+      autoWidth: true,
+    });
+
+    expect(vm.autoWidth).toBe(true);
+    expect(vm.words).toEqual([]);
+    expect(vm.activeWordIndex).toBe(-1);
+    expect(vm.text).toBe('Hello world');
+  });
+
+  it('preserves word-by-word timing when autoWidth is false', () => {
+    const wordTimedState = {
+      kind: /** @type {const} */ ('lyrics'),
+      line: 'Hello world',
+      words: [
+        { text: 'Hello', timeMs: 1000, durationMs: 500 },
+        { text: 'world', timeMs: 1500, durationMs: 500 },
+      ],
+      activeWordIndex: 0,
+    };
+
+    const vm = buildIndicatorViewModel(wordTimedState, {
+      ...baseSettings,
+      autoWidth: false,
+    });
+
+    expect(vm.autoWidth).toBe(false);
+    expect(vm.words).toHaveLength(2);
+    expect(vm.activeWordIndex).toBe(0);
+    expect(vm.text).toContain('weight="bold"');
+    expect(vm.text).toContain('Hello');
+  });
 });

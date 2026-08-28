@@ -50,7 +50,7 @@ export function formatDisplayState(
         } else if (textColorMode === 'custom' && /^#[0-9a-fA-F]{6}$/.test(customTextColor)) {
           baseColor = customTextColor;
         }
-        const dimmedColor = `${baseColor}59`; // 35% alpha
+        const dimmedColor = '#595959';
 
         const wordMarkup = state.words.map(
           /**
@@ -73,7 +73,7 @@ export function formatDisplayState(
             return `<span foreground="${dimmedColor}">${escapedWord}</span>${space}`;
           },
         );
-        return { text: wordMarkup.join(''), visible: true };
+        return { text: `\u200B${wordMarkup.join('')}`, visible: true };
       }
 
       return visibleText(escapeMarkup(line));

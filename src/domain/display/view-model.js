@@ -26,8 +26,15 @@ import { formatDisplayState } from './state.js';
  * @returns {IndicatorViewModel}
  */
 export function buildIndicatorViewModel(state, settings) {
+  // When autoWidth is enabled, word-by-word timing highlight is suppressed because dynamic
+  // width recalculation causes severe GNOME top panel jitter.
+  const effectiveState =
+    settings.autoWidth && state.kind === 'lyrics'
+      ? { ...state, words: [], activeWordIndex: -1 }
+      : state;
+
   const display = formatDisplayState(
-    state,
+    effectiveState,
     settings.fallbackMode,
     settings.textColorMode,
     settings.customTextColor,
@@ -42,8 +49,8 @@ export function buildIndicatorViewModel(state, settings) {
     customTextColor: settings.customTextColor,
     textShadowEnabled: settings.textShadowEnabled,
     glowStrength: settings.glowStrength,
-    words: state.kind === 'lyrics' ? state.words : [],
-    activeWordIndex: state.kind === 'lyrics' ? state.activeWordIndex : -1,
+    words: effectiveState.kind === 'lyrics' ? effectiveState.words : [],
+    activeWordIndex: effectiveState.kind === 'lyrics' ? effectiveState.activeWordIndex : -1,
     autoWidth: settings.autoWidth,
   };
 }

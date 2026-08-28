@@ -25,14 +25,21 @@ export function buildLabelStyleString(options) {
     : `width: ${options.maxWidth}px; min-width: 1px;`;
   let style = `${widthProp} text-align: ${options.textAlign};`;
 
-  if (options.textColorMode === 'default' || options.textColorMode === 'white') {
-    style += ` color: ${WHITE_TEXT_COLOR};`;
-  } else if (options.textColorMode === 'black') {
-    style += ` color: ${BLACK_TEXT_COLOR};`;
-  } else if (options.textColorMode === 'custom' && options.customTextColor) {
-    style += ` color: ${options.customTextColor};`;
+  const hasWordTimings = Boolean(options.words && options.words.length > 0);
+
+  // In GNOME Shell, setting `color:` in CSS on the label overrides the
+  // Pango markup foreground colors on child spans, so omit CSS color during word timings.
+  if (!hasWordTimings) {
+    if (options.textColorMode === 'default' || options.textColorMode === 'white') {
+      style += ` color: ${WHITE_TEXT_COLOR};`;
+    } else if (options.textColorMode === 'black') {
+      style += ` color: ${BLACK_TEXT_COLOR};`;
+    } else if (options.textColorMode === 'custom' && options.customTextColor) {
+      style += ` color: ${options.customTextColor};`;
+    }
   }
 
+  // Always apply text-shadow glow when enabled by the user
   if (options.textShadowEnabled) {
     style += ` text-shadow: ${buildTextShadowString(options.glowStrength)};`;
   } else {

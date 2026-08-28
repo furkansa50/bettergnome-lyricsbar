@@ -6,6 +6,7 @@ import {
   computeScrollValue,
   computeSeekPositionMs,
   computeTargetSetPositionMs,
+  determineSeekAction,
   formatTrackTime,
 } from '../../src/domain/display/track-progress.js';
 
@@ -145,5 +146,112 @@ describe('computeScrollValue', () => {
     expect(
       computeScrollValue({ childY: 500, childHeight: 20, pageSize: 0, upper: 1000 }),
     ).toBeNull();
+  });
+});
+
+describe('determineSeekAction', () => {
+  it('routes browser players with a valid trackId to set-position with exact target timestamp', () => {
+    // Firefox playing YouTube Music: jumping from 1:32 (92s) back to 0:30 (30s)
+    const result = determineSeekAction(
+      {
+        busName: 'org.mpris.MediaPlayer2.firefox.instance_1_162',
+        trackId: '/org/mpris/MediaPlayer2/firefox',
+        currentPositionMs: 92_000,
+        syncPositionOffsetMs: 0,
+      },
+      30_000,
+    );
+
+    expect(result).toEqual({
+      method: 'set-position',
+      trackId: '/org/mpris/MediaPlayer2/firefox',
+      targetMs: 30_000,
+    });
+  });
+
+  it('translates targetMs when syncPositionOffsetMs is present for cumulative players', () => {
+    const result = determineSeekAction(
+      {
+        busName: 'org.mpris.MediaPlayer2.chromium.instance_1',
+        trackId: '/org/chromium/MediaPlayer2/TrackList/Track_0',
+        currentPositionMs: 15_000,
+        syncPositionOffsetMs: 200_000,
+      },
+      45_000,
+    );
+
+    expect(result).toEqual({
+      method: 'set-position',
+      trackId: '/org/chromium/MediaPlayer2/TrackList/Track_0',
+      targetMs: 245_000,
+    });
+  });
+
+  it('routes Spotify Desktop to seek-offset when current position is known', () => {
+    const result = determineSeekAction(
+      {
+        busName: 'org.mpris.MediaPlayer2.spotify',
+        trackId: '/com/spotify/track/6rqhFgbbKwnb9MLmUQDhG6',
+        currentPositionMs: 92_000,
+        syncPositionOffsetMs: 0,
+      },
+      30_000,
+    );
+
+    expect(result).toEqual({
+      method: 'seek-offset',
+      offsetMs: -62_000,
+    });
+  });
+
+  it('falls back to seek-offset when trackId is missing or empty', () => {
+    const result = determineSeekAction(
+      {
+        busName: 'org.mpris.MediaPlayer2.vlc',
+        trackId: null,
+        currentPositionMs: 40_000,
+      },
+      55_000,
+    );
+
+    expect(result).toEqual({
+      method: 'seek-offset',
+      offsetMs: 15_000,
+    });
+  });
+
+  it('returns none when trackId is missing and current position is unknown', () => {
+    const result = determineSeekAction(
+      {
+        busName: 'org.mpris.MediaPlayer2.vlc',
+        trackId: null,
+        currentPositionMs: null,
+      },
+      55_000,
+    );
+
+    expect(result).toEqual({
+      method: 'none',
+      reason: 'no-track-id-and-no-known-position',
+    });
+  });
+
+  it('rejects invalid target positions', () => {
+    expect(
+      determineSeekAction({ busName: 'org.mpris.MediaPlayer2.firefox', trackId: '/track' }, -10),
+    ).toEqual({
+      method: 'none',
+      reason: 'invalid-target-position',
+    });
+
+    expect(
+      determineSeekAction(
+        { busName: 'org.mpris.MediaPlayer2.firefox', trackId: '/track' },
+        Number.NaN,
+      ),
+    ).toEqual({
+      method: 'none',
+      reason: 'invalid-target-position',
+    });
   });
 });

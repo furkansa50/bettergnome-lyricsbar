@@ -59,6 +59,11 @@ class LyricBarIndicatorBase extends PanelMenu.Button {
     });
     setSingleLineMode(this._lyricBarLabel);
 
+    const clutterText = Reflect.get(this._lyricBarLabel, 'clutter_text');
+    if (clutterText !== null && clutterText !== undefined) {
+      Reflect.set(/** @type {object} */ (clutterText), 'use_markup', true);
+    }
+
     this._lyricBarBin.set_child(this._lyricBarLabel);
     this._lyricBarBox.add_child(this._lyricBarBin);
     this.add_child(this._lyricBarBox);
@@ -82,12 +87,6 @@ class LyricBarIndicatorBase extends PanelMenu.Button {
     if (applied.visible !== viewModel.visible) {
       applied.visible = viewModel.visible;
       setActorVisible(this, viewModel.visible);
-    }
-
-    const textChanged = applied.text !== viewModel.text;
-    if (textChanged) {
-      applied.text = viewModel.text;
-      setLabelText(this._lyricBarLabel, viewModel.text);
     }
 
     // Pango.EllipsizeMode: 0=NONE, 3=END.
@@ -114,10 +113,14 @@ class LyricBarIndicatorBase extends PanelMenu.Button {
       setEllipsizeMode(this._lyricBarLabel, ellipsize);
     }
 
+    // Apply CSS style BEFORE text markup so that set_style() cannot
+    // reset the Pango attributes we set via set_markup().
     const style = buildLabelStyleString(viewModel);
+    let styleChanged = false;
     if (applied.style !== style) {
       applied.style = style;
       geometryChanged = true;
+      styleChanged = true;
       setActorStyle(this._lyricBarLabel, style);
     }
 
@@ -125,6 +128,27 @@ class LyricBarIndicatorBase extends PanelMenu.Button {
       applied.align = viewModel.textAlign;
       geometryChanged = true;
       setLabelAlignment(this._lyricBarLabel, viewModel.textAlign);
+    }
+
+    // Apply text AFTER style. If only text changed, we still need markup.
+    // If style changed, we must re-apply markup even if the text string
+    // is identical, because set_style() invalidates ClutterText's
+    // PangoLayout and drops the markup attributes.
+    const textChanged = applied.text !== viewModel.text;
+    if (textChanged || styleChanged) {
+      applied.text = viewModel.text;
+      setLabelText(this._lyricBarLabel, viewModel.text);
+      queueRedraw(this._lyricBarLabel);
+      queueRedraw(this._lyricBarBin);
+      queueRedraw(this._lyricBarBox);
+      queueRedraw(this);
+      const getParent = Reflect.get(this, 'get_parent');
+      if (typeof getParent === 'function') {
+        const parent = getParent.call(this);
+        if (parent !== null && parent !== undefined) {
+          queueRedraw(parent);
+        }
+      }
     }
 
     // Text-only changes are handled by the label's own relayout. Walking the
@@ -386,6 +410,9 @@ function setLabelText(label, text) {
       const setMarkup = Reflect.get(/** @type {object} */ (clutterText), 'set_markup');
       if (typeof setMarkup === 'function') {
         setMarkup.call(clutterText, text);
+        queueRedraw(clutterText);
+        queueRedraw(label);
+        queueRelayout(label);
         return;
       }
     } catch {
@@ -400,6 +427,8 @@ function setLabelText(label, text) {
     setter.call(label, text);
   }
 
+  queueRedraw(label);
+
   // Only reachable when markup was unavailable; `clutter_text` may legitimately
   // be absent here, and Reflect.get would throw on null.
   if (clutterText === null || clutterText === undefined) {
@@ -409,6 +438,18 @@ function setLabelText(label, text) {
   const clutterSetter = Reflect.get(/** @type {object} */ (clutterText), 'set_text');
   if (typeof clutterSetter === 'function') {
     clutterSetter.call(clutterText, text);
+  }
+  queueRedraw(clutterText);
+}
+
+/**
+ * @param {unknown} actor
+ * @returns {void}
+ */
+function queueRedraw(actor) {
+  const redraw = Reflect.get(/** @type {object} */ (actor), 'queue_redraw');
+  if (typeof redraw === 'function') {
+    redraw.call(actor);
   }
 }
 
@@ -421,9 +462,11 @@ function setActorStyle(actor, style) {
   const setter = Reflect.get(/** @type {object} */ (actor), 'set_style');
   if (typeof setter === 'function') {
     setter.call(actor, style);
+    queueRelayout(actor);
     return;
   }
   Reflect.set(/** @type {object} */ (actor), 'style', style);
+  queueRelayout(actor);
 }
 
 /**

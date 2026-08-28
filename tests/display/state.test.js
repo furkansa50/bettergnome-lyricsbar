@@ -155,7 +155,7 @@ describe('formatDisplayState', () => {
         'track',
       ),
     ).toEqual({
-      text: '<span foreground="#ffffff" weight="bold">Look</span> <span foreground="#ffffff59">at</span>',
+      text: '\u200B<span foreground="#ffffff" weight="bold">Look</span> <span foreground="#595959">at</span>',
       visible: true,
     });
 
@@ -170,7 +170,7 @@ describe('formatDisplayState', () => {
         'track',
       ),
     ).toEqual({
-      text: '<span foreground="#ffffff">Look</span> <span foreground="#ffffff" weight="bold">at</span>',
+      text: '\u200B<span foreground="#ffffff">Look</span> <span foreground="#ffffff" weight="bold">at</span>',
       visible: true,
     });
   });
@@ -193,7 +193,7 @@ describe('formatDisplayState', () => {
         'track',
       ),
     ).toEqual({
-      text: '<span foreground="#ffffff" weight="bold">Be</span><span foreground="#ffffff59">cause</span> <span foreground="#ffffff59">love</span>',
+      text: '\u200B<span foreground="#ffffff" weight="bold">Be</span><span foreground="#595959">cause</span> <span foreground="#595959">love</span>',
       visible: true,
     });
 
@@ -208,7 +208,68 @@ describe('formatDisplayState', () => {
         'track',
       ),
     ).toEqual({
-      text: '<span foreground="#ffffff">Be</span><span foreground="#ffffff" weight="bold">cause</span> <span foreground="#ffffff59">love</span>',
+      text: '\u200B<span foreground="#ffffff">Be</span><span foreground="#ffffff" weight="bold">cause</span> <span foreground="#595959">love</span>',
+      visible: true,
+    });
+  });
+
+  it('dims upcoming words with a solid colour, never a Pango alpha channel', () => {
+    const words = [
+      { beginMs: 1000, endMs: 1500, text: 'Look' },
+      { beginMs: 1500, endMs: 2000, text: 'at' },
+    ];
+
+    /**
+     * @param {import('../../src/domain/settings/types.js').TextColorMode} mode
+     * @param {string} custom
+     * @returns {string}
+     */
+    const render = (mode, custom) =>
+      formatDisplayState(
+        { kind: 'lyrics', line: 'Look at', words, activeWordIndex: 0 },
+        'track',
+        mode,
+        custom,
+      ).text;
+
+    // Pango foreground alpha is dropped by the shell renderer, so every span
+    // must carry a plain `#rrggbb` colour.
+    for (const [mode, custom] of /** @type {const} */ ([
+      ['default', ''],
+      ['black', ''],
+      ['custom', '#ff0000'],
+    ])) {
+      const text = render(mode, custom);
+      for (const color of text.matchAll(/foreground="([^"]+)"/g)) {
+        expect(color[1]).toMatch(/^#[0-9a-f]{6}$/);
+      }
+      expect(text).not.toContain('alpha=');
+    }
+
+    // Light text darkens, dark text lightens, so upcoming words stay legible
+    // on both dark and light panels.
+    expect(render('default', '')).toContain('<span foreground="#595959">at</span>');
+    expect(render('black', '')).toContain('<span foreground="#595959">at</span>');
+  });
+
+  it('dims all words when activeWordIndex is -1 before the line begins', () => {
+    const words = [
+      { beginMs: 1000, endMs: 1500, text: 'Look' },
+      { beginMs: 1500, endMs: 2000, text: 'at' },
+    ];
+
+    expect(
+      formatDisplayState(
+        {
+          kind: 'lyrics',
+          line: 'Look at',
+          words,
+          activeWordIndex: -1,
+        },
+        'track',
+      ),
+    ).toEqual({
+      text: '\u200B<span foreground="#595959">Look</span> <span foreground="#595959">at</span>',
       visible: true,
     });
   });

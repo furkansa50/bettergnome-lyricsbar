@@ -68,6 +68,33 @@ describe('displayStateFromLookup', () => {
     });
   });
 
+  it('returns the first word-timed line with words and activeWordIndex -1 when available', () => {
+    const wordTimedLookup = {
+      ...syncedLookup,
+      wordLines: [
+        {
+          timeMs: 1000,
+          endMs: 3000,
+          text: 'Look at the stars',
+          words: [
+            { beginMs: 1000, endMs: 1500, text: 'Look' },
+            { beginMs: 1500, endMs: 2000, text: 'at' },
+          ],
+        },
+      ],
+    };
+    expect(displayStateFromLookup(snapshot({}), wordTimedLookup)).toEqual({
+      kind: 'lyrics',
+      line: 'Look at the stars',
+      words: [
+        { beginMs: 1000, endMs: 1500, text: 'Look' },
+        { beginMs: 1500, endMs: 2000, text: 'at' },
+      ],
+      activeWordIndex: -1,
+      track: { title: 'Yellow', artist: 'Coldplay' },
+    });
+  });
+
   it('preserves the current synced line for same-track refreshes', () => {
     expect(
       displayStateFromLookup(snapshot({}), syncedLookup, {
@@ -256,22 +283,9 @@ describe('displayStateFromSyncedPosition', () => {
     });
   });
 
-  it('displays the album name before the first timestamp when present', () => {
+  it('displays the track title before the first timestamp', () => {
     expect(displayStateFromSyncedPosition(snapshot({}), syncedLookup, 500)).toEqual({
-      kind: 'lyrics',
-      line: 'Parachutes',
-      words: [],
-      activeWordIndex: -1,
-      track: { title: 'Yellow', artist: 'Coldplay' },
-    });
-  });
-
-  it('falls back to the first lyric line before the first timestamp when album is missing', () => {
-    expect(displayStateFromSyncedPosition(snapshot({ album: '' }), syncedLookup, 500)).toEqual({
-      kind: 'lyrics',
-      line: 'Look at the stars',
-      words: [],
-      activeWordIndex: -1,
+      kind: 'track',
       track: { title: 'Yellow', artist: 'Coldplay' },
     });
   });

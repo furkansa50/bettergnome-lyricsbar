@@ -28,7 +28,7 @@ import {
 } from '../domain/display/position-clock.js';
 import { shouldHideIndicator } from '../domain/display/visibility.js';
 import { buildIndicatorViewModel } from '../domain/display/view-model.js';
-import { computeTargetSetPositionMs } from '../domain/display/track-progress.js';
+import { determineSeekAction } from '../domain/display/track-progress.js';
 import { selectLyricLineIndex } from '../domain/lyrics/lrc.js';
 import { selectActivePlayer } from '../domain/mpris/selection.js';
 import {
@@ -293,6 +293,9 @@ export class LyricBarController {
         this.#refreshSelection();
         return;
       }
+      if (previousSettings !== null && previousSettings.autoWidth !== settings.autoWidth) {
+        this.#updateWordTick();
+      }
       this.#refreshDisplay();
     });
 
@@ -491,23 +494,29 @@ export class LyricBarController {
       return;
     }
 
-    const trackId = this.#activePlayer?.trackId ?? null;
     this.#invokePlayerControl((proxy) => {
       if (!proxy.canSeek) {
         this.#logger?.debug('seek-rejected', { reason: 'player-reports-can-seek-false' });
         return;
       }
 
-      // Prefer relative Seek(positionMs - currentMs) when current position is known.
-      // Many MPRIS players (notably Spotify Desktop and Chromium) either do not
-      // implement SetPosition or erroneously restart the track from 0:00 when
-      // SetPosition is called, whereas Seek(offset) is universally supported.
-      const currentMs = this.#currentPositionMs();
-      if (currentMs !== null) {
-        proxy.seek(positionMs - currentMs);
-      } else if (typeof trackId === 'string' && trackId !== '') {
-        const targetMs = computeTargetSetPositionMs(positionMs, this.#syncPositionOffsetMs);
-        proxy.setPosition(trackId, targetMs);
+      const action = determineSeekAction(
+        {
+          busName: this.#activePlayer?.busName,
+          trackId: this.#activePlayer?.trackId,
+          currentPositionMs: this.#currentPositionMs(),
+          syncPositionOffsetMs: this.#syncPositionOffsetMs,
+        },
+        positionMs,
+      );
+
+      if (action.method === 'set-position') {
+        proxy.setPosition(action.trackId, action.targetMs);
+      } else if (action.method === 'seek-offset') {
+        proxy.seek(action.offsetMs);
+      } else {
+        this.#logger?.debug('seek-rejected', { reason: action.reason });
+        return;
       }
 
       this.#applyOptimisticSeek(positionMs);
@@ -1054,6 +1063,10 @@ export class LyricBarController {
       return false;
     }
 
+    if (this.#currentSettings?.autoWidth) {
+      return false;
+    }
+
     if (this.#activePlayer.playbackStatus !== 'Playing') {
       return false;
     }
@@ -1343,6 +1356,14 @@ export class LyricBarController {
     }
 
     if (shouldHoldLowConfidenceSyncedPosition(player, rawPositionMs, options)) {
+      if (player.playbackStatus === 'Paused') {
+        this.#logger?.debug('sync-position-held-paused', {
+          positionMs: rawPositionMs,
+          title: player.title,
+        });
+        return this.#lastAcceptedSyncPositionMs;
+      }
+
       const estimate = updateStagnantSyncedPositionEstimate(this.#syncPositionEstimate, {
         canEstimate: true,
         lastAcceptedPositionMs: this.#lastAcceptedSyncPositionMs,

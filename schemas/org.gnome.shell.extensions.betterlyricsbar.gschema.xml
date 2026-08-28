@@ -9,13 +9,13 @@
     <key name="max-width" type="i">
       <default>720</default>
       <range min="120" max="720"/>
-      <summary>Maximum label width</summary>
-      <description>Maximum width in pixels for the top-bar lyric label.</description>
+      <summary>Maximum / manual label width</summary>
+      <description>Top-bar lyric label width in pixels (fixed width when auto-width is disabled, maximum limit when enabled).</description>
     </key>
     <key name="auto-width" type="b">
       <default>true</default>
       <summary>Auto width</summary>
-      <description>Automatically adjust label width to fit lyrics text (up to maximum width).</description>
+      <description>Automatically adjust label width to fit lyrics text (up to maximum width). Word-by-word lyrics cannot be used with auto width.</description>
     </key>
     <key name="text-align" type="s">
       <default>'left'</default>

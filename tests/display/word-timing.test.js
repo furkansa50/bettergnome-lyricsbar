@@ -71,8 +71,8 @@ describe('findWordTimedLine', () => {
 describe('selectActiveWordIndex', () => {
   const line = /** @type {WordTimedLyricLine} */ (wordLines[0]);
 
-  it('returns -1 before the first word begins', () => {
-    expect(selectActiveWordIndex(line, 999)).toBe(-1);
+  it('returns 0 before the first word begins', () => {
+    expect(selectActiveWordIndex(line, 999)).toBe(0);
   });
 
   it('advances the pointer word by word', () => {
