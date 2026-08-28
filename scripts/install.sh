@@ -2,7 +2,7 @@
 set -euo pipefail
 
 readonly EXTENSION_UUID="betterlyricsbar@furkansa50"
-readonly REPOSITORY="furkansa50/bettergnome-lyrics"
+readonly REPOSITORY="furkansa50/bettergnome-lyricsbar"
 readonly ASSET_NAME="${EXTENSION_UUID}.zip"
 readonly DEFAULT_VERSION="latest"
 readonly EXTENSION_DIR="${HOME}/.local/share/gnome-shell/extensions/${EXTENSION_UUID}"
@@ -135,8 +135,8 @@ install_updater() {
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly REPOSITORY="furkansa50/bettergnome-lyrics"
-readonly INSTALLER_URL="https://raw.githubusercontent.com/furkansa50/bettergnome-lyrics/main/scripts/install.sh"
+readonly REPOSITORY="furkansa50/bettergnome-lyricsbar"
+readonly INSTALLER_URL="https://raw.githubusercontent.com/furkansa50/bettergnome-lyricsbar/main/scripts/install.sh"
 readonly STATE_DIR="${XDG_STATE_HOME:-${HOME}/.local/state}/lyricbar"
 readonly VERSION_FILE="${STATE_DIR}/version"
 

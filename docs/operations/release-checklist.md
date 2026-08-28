@@ -58,22 +58,22 @@ It should not include tests, docs, `.git`, `node_modules`, screenshots, or local
 Test the public installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/furkansa50/bettergnome-lyrics/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/furkansa50/bettergnome-lyricsbar/main/scripts/install.sh | bash
 ```
 
 Test the optional GitHub updater:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/furkansa50/bettergnome-lyrics/main/scripts/install.sh | bash -s -- --install-updater
+curl -fsSL https://raw.githubusercontent.com/furkansa50/bettergnome-lyricsbar/main/scripts/install.sh | bash -s -- --install-updater
 ~/.local/bin/lyricbar-update
 systemctl --user status lyricbar-update.timer
-curl -fsSL https://raw.githubusercontent.com/furkansa50/bettergnome-lyrics/main/scripts/install.sh | bash -s -- --uninstall-updater
+curl -fsSL https://raw.githubusercontent.com/furkansa50/bettergnome-lyricsbar/main/scripts/install.sh | bash -s -- --uninstall-updater
 ```
 
 Test a pinned release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/furkansa50/bettergnome-lyrics/main/scripts/install.sh | bash -s -- v1.0.0
+curl -fsSL https://raw.githubusercontent.com/furkansa50/bettergnome-lyricsbar/main/scripts/install.sh | bash -s -- v1.1.0
 ```
 
 Manual release-asset install:

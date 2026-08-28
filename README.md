@@ -82,13 +82,13 @@ Install directly from the official store or Extension Manager:
 Recommended install (includes automatic daily updates):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/furkansa50/bettergnome-lyrics/main/scripts/install.sh | bash -s -- --install-updater
+curl -fsSL https://raw.githubusercontent.com/furkansa50/bettergnome-lyricsbar/main/scripts/install.sh | bash -s -- --install-updater
 ```
 
 Install without auto-update:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/furkansa50/bettergnome-lyrics/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/furkansa50/bettergnome-lyricsbar/main/scripts/install.sh | bash
 ```
 
 Open preferences:
@@ -108,7 +108,7 @@ Uninstall:
 ```bash
 gnome-extensions disable betterlyricsbar@furkansa50
 rm -rf ~/.local/share/gnome-shell/extensions/betterlyricsbar@furkansa50
-curl -fsSL https://raw.githubusercontent.com/furkansa50/bettergnome-lyrics/main/scripts/install.sh | bash -s -- --uninstall-updater
+curl -fsSL https://raw.githubusercontent.com/furkansa50/bettergnome-lyricsbar/main/scripts/install.sh | bash -s -- --uninstall-updater
 ```
 
 ## Development

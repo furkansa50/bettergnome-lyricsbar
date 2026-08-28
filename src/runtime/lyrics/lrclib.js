@@ -14,7 +14,7 @@ import { buildLrclibSearchUrl, buildLrclibUrl } from './url.js';
  */
 
 const DEFAULT_TIMEOUT_MS = 10000;
-const USER_AGENT = 'betterlyricsbar/1.0.0 (+https://github.com/furkansa50/bettergnome-lyrics)';
+const USER_AGENT = 'betterlyricsbar/1.1.0 (+https://github.com/furkansa50/bettergnome-lyricsbar)';
 
 export class LrclibProvider {
   /** @type {any} */

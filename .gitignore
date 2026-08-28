@@ -12,3 +12,4 @@ coverage/
 .docs/operations/
 .docs/players/
 .docs/exec-plans
+schemas/gschemas.compiled

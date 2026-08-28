@@ -1,10 +1,10 @@
 {
   "uuid": "betterlyricsbar@furkansa50",
   "name": "Better Lyrics Bar",
-  "version-name": "1.0.0",
-  "version": 1,
+  "version-name": "1.1.0",
+  "version": 2,
   "description": "Synced live lyrics in the GNOME top bar for MPRIS-compatible music players. Fork of fikrilal/gnome-lyricbar",
   "shell-version": ["46", "47", "48", "49", "50"],
-  "url": "https://github.com/furkansa50/bettergnome-lyrics",
+  "url": "https://github.com/furkansa50/bettergnome-lyricsbar",
   "settings-schema": "org.gnome.shell.extensions.betterlyricsbar"
 }
