@@ -16,7 +16,7 @@ import { MusixmatchProvider } from './musixmatch.js';
  */
 
 const DEFAULT_TIMEOUT_MS = 5000;
-const USER_AGENT = 'betterlyricsbar/1.1.0 (+https://github.com/furkansa50/bettergnome-lyricsbar)';
+const USER_AGENT = 'betterlyricsbar/1.1.1 (+https://github.com/furkansa50/bettergnome-lyricsbar)';
 
 export class BetterLyricsProvider {
   /** @type {any} */

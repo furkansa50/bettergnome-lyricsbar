@@ -471,6 +471,8 @@ export class LyricBarController {
       onSeek: (positionMs) => this.#seekToPosition(positionMs),
       onSeekBy: (offsetMs) => this.#seekByOffset(offsetMs),
       onSelectLyricsSource: (source) => this.#setLyricsSource(source),
+      onAdjustSyncOffset: (deltaMs) => this.#adjustSyncOffset(deltaMs),
+      onResetSyncOffset: () => this.#setSyncOffset(0),
     });
   }
 
@@ -481,6 +483,31 @@ export class LyricBarController {
   #setLyricsSource(source) {
     this.#settings?.setLyricsSource(source);
     this.#lyricsService?.forceReload({ bypassCache: true });
+  }
+
+  /**
+   * @param {number} deltaMs
+   * @returns {void}
+   */
+  #adjustSyncOffset(deltaMs) {
+    if (typeof deltaMs !== 'number' || !Number.isFinite(deltaMs)) {
+      return;
+    }
+    const current = this.#currentSettings?.syncOffsetMs ?? 0;
+    const next = Math.max(-5000, Math.min(5000, current + deltaMs));
+    this.#settings?.setSyncOffsetMs(next);
+  }
+
+  /**
+   * @param {number} offsetMs
+   * @returns {void}
+   */
+  #setSyncOffset(offsetMs) {
+    if (typeof offsetMs !== 'number' || !Number.isFinite(offsetMs)) {
+      return;
+    }
+    const next = Math.max(-5000, Math.min(5000, offsetMs));
+    this.#settings?.setSyncOffsetMs(next);
   }
 
   /**
@@ -1535,6 +1562,7 @@ export class LyricBarController {
       activeLineIndex,
       lyricsSource: this.#currentSettings?.lyricsSource ?? 'musixmatch',
       resolvedProvider: syncedLookup?.source ?? null,
+      syncOffsetMs: this.#currentSettings?.syncOffsetMs ?? 0,
     });
   }
 

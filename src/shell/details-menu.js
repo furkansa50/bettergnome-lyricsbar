@@ -34,6 +34,7 @@ import { _t } from '../runtime/i18n.js';
  *   activeLineIndex: number,
  *   lyricsSource?: string | null,
  *   resolvedProvider?: string | null,
+ *   syncOffsetMs?: number,
  * }>} DetailsMenuState
  *
  * @typedef {Readonly<{
@@ -43,6 +44,8 @@ import { _t } from '../runtime/i18n.js';
  *   onSeek: (positionMs: number) => void,
  *   onSeekBy: (offsetMs: number) => void,
  *   onSelectLyricsSource?: (source: import('../domain/settings/types.js').LyricsSource) => void,
+ *   onAdjustSyncOffset?: (deltaMs: number) => void,
+ *   onResetSyncOffset?: () => void,
  * }>} DetailsMenuActions
  */
 
@@ -239,6 +242,65 @@ export function buildDetailsMenu(menu, actions) {
   }
   sourceSectionBox.add_child(sourcePillsBox);
   cardBox.add_child(sourceSectionBox);
+
+  // --- Lyrics Sync Offset Control ---
+  const offsetSectionBox = new St.BoxLayout({
+    style_class: 'lyricbar-details-offset-section',
+    x_expand: true,
+  });
+  setOrientation(offsetSectionBox, false);
+
+  const offsetTitleLabel = new St.Label({
+    style_class: 'lyricbar-details-offset-title',
+    text: _t('Sync offset', 'Senkron'),
+    y_align: Clutter.ActorAlign.CENTER,
+  });
+  Reflect.set(offsetTitleLabel, 'x_expand', true);
+  offsetSectionBox.add_child(offsetTitleLabel);
+
+  const offsetControlsBox = new St.BoxLayout({
+    style_class: 'lyricbar-details-offset-controls',
+  });
+  setOrientation(offsetControlsBox, false);
+
+  const offsetMinusBtn = new St.Button({
+    style_class: 'lyricbar-details-offset-btn',
+    child: new St.Icon({ icon_name: 'list-remove-symbolic', icon_size: 14 }),
+    can_focus: true,
+    reactive: true,
+    accessible_name: _t('Delay lyrics 50ms', 'Sözleri 50ms geciktir'),
+  });
+  const offsetMinusClickedId = offsetMinusBtn.connect('clicked', () => {
+    actions.onAdjustSyncOffset?.(-50);
+  });
+
+  const offsetValueBtn = new St.Button({
+    style_class: 'lyricbar-details-offset-value',
+    label: '0 ms',
+    can_focus: true,
+    reactive: true,
+    accessible_name: _t('Reset sync offset', 'Senkron ofsetini sıfırla'),
+  });
+  const offsetValueClickedId = offsetValueBtn.connect('clicked', () => {
+    actions.onResetSyncOffset?.();
+  });
+
+  const offsetPlusBtn = new St.Button({
+    style_class: 'lyricbar-details-offset-btn',
+    child: new St.Icon({ icon_name: 'list-add-symbolic', icon_size: 14 }),
+    can_focus: true,
+    reactive: true,
+    accessible_name: _t('Advance lyrics 50ms', 'Sözleri 50ms öne al'),
+  });
+  const offsetPlusClickedId = offsetPlusBtn.connect('clicked', () => {
+    actions.onAdjustSyncOffset?.(50);
+  });
+
+  offsetControlsBox.add_child(offsetMinusBtn);
+  offsetControlsBox.add_child(offsetValueBtn);
+  offsetControlsBox.add_child(offsetPlusBtn);
+  offsetSectionBox.add_child(offsetControlsBox);
+  cardBox.add_child(offsetSectionBox);
 
   const cardItem = new PopupMenu.PopupBaseMenuItem({
     reactive: false,
@@ -471,6 +533,18 @@ export function buildDetailsMenu(menu, actions) {
         setLabelText(sourceBadgeLabel, '');
         setActorVisible(sourceBadgeLabel, false);
       }
+
+      const offset =
+        typeof state.syncOffsetMs === 'number' && Number.isFinite(state.syncOffsetMs)
+          ? state.syncOffsetMs
+          : 0;
+      const offsetFormatted = offset > 0 ? `+${offset} ms` : `${offset} ms`;
+      setButtonLabel(offsetValueBtn, offsetFormatted);
+      if (offset !== 0) {
+        addStyleClass(offsetValueBtn, 'lyricbar-details-offset-value-active');
+      } else {
+        removeStyleClass(offsetValueBtn, 'lyricbar-details-offset-value-active');
+      }
     },
 
     destroy() {
@@ -488,6 +562,9 @@ export function buildDetailsMenu(menu, actions) {
       disconnectSafely(nextButton, nextClickedId);
       disconnectSafely(rewindButton, rewindClickedId);
       disconnectSafely(forwardButton, forwardClickedId);
+      disconnectSafely(offsetMinusBtn, offsetMinusClickedId);
+      disconnectSafely(offsetValueBtn, offsetValueClickedId);
+      disconnectSafely(offsetPlusBtn, offsetPlusClickedId);
       disconnectSafely(progressBar, progressWidthId);
       disconnectSafely(progressBar, progressPressId);
       disconnectSafely(lyricsBox, lyricsHeightId);
@@ -1029,6 +1106,19 @@ function setLabelText(label, text) {
     label.set_text(text);
   } catch {
     Reflect.set(label, 'text', text);
+  }
+}
+
+/**
+ * @param {any} button
+ * @param {string} text
+ * @returns {void}
+ */
+function setButtonLabel(button, text) {
+  try {
+    button.set_label(text);
+  } catch {
+    Reflect.set(button, 'label', text);
   }
 }
 

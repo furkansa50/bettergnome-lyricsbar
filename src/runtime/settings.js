@@ -8,6 +8,7 @@ import { normalizeSettings } from '../domain/settings/normalize.js';
  *   get_string(key: string): string,
  *   set_string(key: string, value: string): boolean,
  *   get_int(key: string): number,
+ *   set_int(key: string, value: number): boolean,
  *   get_strv(key: string): string[],
  *   get_boolean(key: string): boolean,
  *   get_double(key: string): number,
@@ -80,6 +81,15 @@ export class SettingsAdapter {
    */
   setLyricsSource(source) {
     this.#settings.set_string('lyrics-source', source);
+  }
+
+  /**
+   * @param {number} offsetMs
+   * @returns {void}
+   */
+  setSyncOffsetMs(offsetMs) {
+    const clamped = Math.max(-5000, Math.min(5000, Math.round(offsetMs)));
+    this.#settings.set_int('sync-offset-ms', clamped);
   }
 
   /**

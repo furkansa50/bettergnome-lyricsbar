@@ -62,25 +62,38 @@ describe('SettingsAdapter', () => {
 
     expect(backend.set_string).toHaveBeenCalledWith('lyrics-source', 'musixmatch');
   });
+
+  it('sets sync offset on the underlying settings backend', () => {
+    const backend = createSettingsBackend();
+    const lifecycle = new LifecycleRegistry();
+    const adapter = new SettingsAdapter(backend, lifecycle);
+
+    adapter.setSyncOffsetMs(250);
+    expect(backend.set_int).toHaveBeenCalledWith('sync-offset-ms', 250);
+
+    adapter.setSyncOffsetMs(-6000);
+    expect(backend.set_int).toHaveBeenCalledWith('sync-offset-ms', -5000);
+  });
 });
 
 /**
  * @param {{ textAlign?: string }} [overrides]
- * @returns {import('../../src/runtime/settings.js').GSettingsBackend & { emit(signal: string): void }}
+ * @returns {any}
  */
 function createSettingsBackend(overrides = {}) {
-  let nextSignalId = 1;
-  /** @type {Map<string, Array<() => void>>} */
+  /** @type {Map<string, ((...args: any[]) => void)[]>} */
   const handlers = new Map();
+  let nextSignalId = 1;
 
   return {
-    set_string: vi.fn(() => true),
+    set_string: vi.fn(),
+    set_int: vi.fn(),
     get_string: vi.fn((key) => {
       if (key === 'panel-position') {
         return 'center';
       }
       if (key === 'text-align') {
-        return overrides.textAlign ?? 'left';
+        return typeof overrides.textAlign === 'string' ? overrides.textAlign : 'left';
       }
       if (key === 'fallback-mode') {
         return 'track';
