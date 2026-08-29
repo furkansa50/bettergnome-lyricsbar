@@ -33,6 +33,7 @@ const SETTING_KEYS = [
   'style-text-color-custom',
   'style-text-shadow',
   'style-glow-strength',
+  'sync-offset-ms',
 ];
 
 export class SettingsAdapter {
@@ -69,6 +70,7 @@ export class SettingsAdapter {
       customTextColor: this.#settings.get_string('style-text-color-custom'),
       textShadowEnabled: this.#settings.get_boolean('style-text-shadow'),
       glowStrength: this.#settings.get_double('style-glow-strength'),
+      syncOffsetMs: this.#settings.get_int('sync-offset-ms'),
     });
   }
 

@@ -296,6 +296,11 @@ export class LyricBarController {
       if (previousSettings !== null && previousSettings.autoWidth !== settings.autoWidth) {
         this.#updateWordTick();
       }
+      if (previousSettings !== null && previousSettings.syncOffsetMs !== settings.syncOffsetMs) {
+        this.#lastHighlightKey = null;
+        this.#lastSyncedLine = null;
+        this.#lastActiveWordIndex = -1;
+      }
       this.#refreshDisplay();
     });
 
@@ -687,6 +692,7 @@ export class LyricBarController {
       getLyricsSource: () => this.#currentSettings?.lyricsSource ?? 'musixmatch',
       logger: logger?.child('better-lyrics'),
     });
+    provider.prewarm();
     const cache = new LyricsCache(
       lifecycle,
       () => ({
@@ -904,7 +910,13 @@ export class LyricBarController {
       return null;
     }
 
-    return this.#currentPositionMs();
+    const currentMs = this.#currentPositionMs();
+    if (currentMs === null) {
+      return null;
+    }
+
+    const offsetMs = this.#currentSettings?.syncOffsetMs ?? 0;
+    return Math.max(0, currentMs + offsetMs);
   }
 
   /**
@@ -1148,18 +1160,21 @@ export class LyricBarController {
       return;
     }
 
+    const offsetMs = this.#currentSettings?.syncOffsetMs ?? 0;
+    const lyricPositionMs = Math.max(0, positionMs + offsetMs);
+
     // Cheap check first: on most ticks the highlight has not moved, and the
     // selection indices alone decide that. Building the display state and its
     // per-word markup before this comparison did the full work and threw it
     // away several times per second.
-    const highlight = selectSyncedHighlight(lookup, positionMs);
+    const highlight = selectSyncedHighlight(lookup, lyricPositionMs);
     const highlightKey = `${highlight.lineIndex}:${highlight.wordLineIndex}:${highlight.activeWordIndex}`;
     if (highlightKey === this.#lastHighlightKey) {
       return;
     }
     this.#lastHighlightKey = highlightKey;
 
-    const next = displayStateFromSyncedPosition(player, lookup, positionMs);
+    const next = displayStateFromSyncedPosition(player, lookup, lyricPositionMs);
     const line = next.kind === 'lyrics' ? next.line : null;
     const activeWordIndex = next.kind === 'lyrics' ? next.activeWordIndex : -1;
 
@@ -1168,7 +1183,7 @@ export class LyricBarController {
     }
 
     if (line !== this.#lastSyncedLine) {
-      this.#logger?.debug('sync-line-selected', { positionMs, text: line });
+      this.#logger?.debug('sync-line-selected', { positionMs: lyricPositionMs, text: line });
     }
 
     this.#lastSyncedLine = line;
@@ -1495,12 +1510,14 @@ export class LyricBarController {
     const lookup = this.#currentLookup;
     const syncedLookup = lookup !== null && lookup.kind === 'synced' ? lookup : null;
     const positionMs = this.#currentPositionMs();
+    const offsetMs = this.#currentSettings?.syncOffsetMs ?? 0;
+    const lyricPositionMs = positionMs !== null ? Math.max(0, positionMs + offsetMs) : null;
 
     // The popup highlights by index, not by text: a repeated chorus otherwise
     // lights up every one of its occurrences and auto-scroll jumps to the first.
     const activeLineIndex =
-      syncedLookup !== null && positionMs !== null
-        ? selectLyricLineIndex(syncedLookup.lines, positionMs)
+      syncedLookup !== null && lyricPositionMs !== null
+        ? selectLyricLineIndex(syncedLookup.lines, lyricPositionMs)
         : -1;
 
     this.#indicator.renderDetails({

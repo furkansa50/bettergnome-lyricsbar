@@ -132,6 +132,37 @@ describe('BetterLyricsProvider source switching', () => {
     expect(sentUrls.some((url) => url.includes('lrclib.net'))).toBe(true);
     expect(callback).toHaveBeenCalledWith({ kind: 'not-found' });
   });
+
+  it('prewarms Musixmatch token when lyricsSource is "musixmatch"', () => {
+    /** @type {string[]} */
+    const sentUrls = [];
+    const mockSession = createMockSession(sentUrls);
+
+    const lifecycle = new LifecycleRegistry();
+    const provider = new BetterLyricsProvider(lifecycle, {
+      session: mockSession,
+      getLyricsSource: () => 'musixmatch',
+    });
+
+    provider.prewarm();
+    expect(sentUrls).toHaveLength(1);
+    expect(sentUrls[0]).toContain('token.get');
+  });
+
+  it('does not prewarm Musixmatch token when lyricsSource is "lrclib"', () => {
+    /** @type {string[]} */
+    const sentUrls = [];
+    const mockSession = createMockSession(sentUrls);
+
+    const lifecycle = new LifecycleRegistry();
+    const provider = new BetterLyricsProvider(lifecycle, {
+      session: mockSession,
+      getLyricsSource: () => 'lrclib',
+    });
+
+    provider.prewarm();
+    expect(sentUrls).toHaveLength(0);
+  });
 });
 
 describe('BetterLyricsProvider hits', () => {

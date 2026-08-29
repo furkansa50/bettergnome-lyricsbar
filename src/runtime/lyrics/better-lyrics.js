@@ -15,7 +15,7 @@ import { MusixmatchProvider } from './musixmatch.js';
  * @typedef {(result: LyricsProviderResult) => void} LyricsLookupCallback
  */
 
-const DEFAULT_TIMEOUT_MS = 10000;
+const DEFAULT_TIMEOUT_MS = 5000;
 const USER_AGENT = 'betterlyricsbar/1.1.0 (+https://github.com/furkansa50/bettergnome-lyricsbar)';
 
 export class BetterLyricsProvider {
@@ -95,6 +95,17 @@ export class BetterLyricsProvider {
       }
       this.#session = null;
     });
+  }
+
+  /**
+   * Pre-warm underlying provider resources (e.g. Musixmatch session token).
+   *
+   * @returns {void}
+   */
+  prewarm() {
+    if (this.#enabled && this.#getLyricsSource() === 'musixmatch') {
+      this.#musixmatchProvider.prewarm();
+    }
   }
 
   /**

@@ -23,6 +23,7 @@
  *   textShadowEnabled?: unknown,
  *   glowStrength?: unknown,
  *   autoWidth?: unknown,
+ *   syncOffsetMs?: unknown,
  * }>} RawSettings
  *
  * @typedef {Readonly<{
@@ -42,6 +43,7 @@
  *   textShadowEnabled: boolean,
  *   glowStrength: number,
  *   autoWidth: boolean,
+ *   syncOffsetMs: number,
  * }>} LyricBarSettings
  */
 

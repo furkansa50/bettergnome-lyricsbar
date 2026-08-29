@@ -507,6 +507,25 @@ export default class LyricBarPreferences extends ExtensionPreferences {
 
     behaviorGroup.add(lyricsSourceRow);
 
+    // sync-offset-ms: SpinRow
+    const syncOffsetRow = new Adw.SpinRow({
+      title: _t('Lyrics sync offset (ms)', 'Şarkı sözü senkron ofseti (ms)'),
+      subtitle: _t(
+        'Adjust timing offset in milliseconds to align lyrics with audio (+ advances, - delays).',
+        'Sözleri sesle tam hizalamak için milisaniye cinsinden zamanlama ofseti (+ öne alır, - geciktirir).',
+      ),
+      adjustment: new Gtk.Adjustment({
+        lower: -5000,
+        upper: 5000,
+        step_increment: 50,
+        page_increment: 250,
+        value: settings.get_int('sync-offset-ms'),
+      }),
+    });
+    settings.bind('sync-offset-ms', syncOffsetRow, 'value', Gio.SettingsBindFlags.DEFAULT);
+
+    behaviorGroup.add(syncOffsetRow);
+
     // 3. Debugging Group
     const debuggingGroup = new Adw.PreferencesGroup({
       title: _t('Debugging', 'Hata Ayıklama'),

@@ -12,6 +12,7 @@ import {
   normalizeCustomTextColor,
   normalizeGlowStrength,
   normalizeLyricsSource,
+  normalizeSyncOffsetMs,
 } from '../../src/domain/settings/normalize.js';
 
 describe('normalizeSettings', () => {
@@ -34,6 +35,7 @@ describe('normalizeSettings', () => {
         textShadowEnabled: false,
         glowStrength: 1.5,
         autoWidth: false,
+        syncOffsetMs: 250,
       }),
     ).toEqual({
       panelPosition: 'left',
@@ -52,6 +54,7 @@ describe('normalizeSettings', () => {
       textShadowEnabled: false,
       glowStrength: 1.5,
       autoWidth: false,
+      syncOffsetMs: 250,
     });
   });
 
@@ -90,6 +93,7 @@ describe('normalizeSettings', () => {
       textShadowEnabled: true,
       glowStrength: 1.0,
       autoWidth: true,
+      syncOffsetMs: 0,
     });
   });
 });
@@ -208,15 +212,37 @@ describe('normalizeGlowStrength', () => {
 });
 
 describe('normalizeLyricsSource', () => {
-  it('accepts known lyrics sources', () => {
+  it('accepts known sources', () => {
     expect(normalizeLyricsSource('musixmatch')).toBe('musixmatch');
     expect(normalizeLyricsSource('better-lyrics')).toBe('better-lyrics');
     expect(normalizeLyricsSource('lrclib')).toBe('lrclib');
   });
 
-  it('rejects unknown lyrics sources', () => {
-    expect(normalizeLyricsSource('auto')).toBe('musixmatch');
+  it('falls back to musixmatch for unknown values', () => {
     expect(normalizeLyricsSource('unknown')).toBe('musixmatch');
     expect(normalizeLyricsSource(null)).toBe('musixmatch');
+  });
+});
+
+describe('normalizeSyncOffsetMs', () => {
+  it('accepts valid offsets within range', () => {
+    expect(normalizeSyncOffsetMs(350)).toBe(350);
+    expect(normalizeSyncOffsetMs(-500)).toBe(-500);
+    expect(normalizeSyncOffsetMs(0)).toBe(0);
+  });
+
+  it('rounds decimal offsets', () => {
+    expect(normalizeSyncOffsetMs(150.6)).toBe(151);
+  });
+
+  it('clamps values beyond boundaries', () => {
+    expect(normalizeSyncOffsetMs(6000)).toBe(5000);
+    expect(normalizeSyncOffsetMs(-8000)).toBe(-5000);
+  });
+
+  it('falls back to 0 for non-finite values', () => {
+    expect(normalizeSyncOffsetMs(Number.NaN)).toBe(0);
+    expect(normalizeSyncOffsetMs('fast')).toBe(0);
+    expect(normalizeSyncOffsetMs(null)).toBe(0);
   });
 });

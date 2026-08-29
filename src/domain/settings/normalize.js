@@ -20,6 +20,9 @@ const DEFAULT_HIDE_WHEN_IDLE = true;
 const DEFAULT_GLOW_STRENGTH = 1.0;
 const MIN_GLOW_STRENGTH = 0.0;
 const MAX_GLOW_STRENGTH = 2.0;
+const DEFAULT_SYNC_OFFSET_MS = 0;
+const MIN_SYNC_OFFSET_MS = -5000;
+const MAX_SYNC_OFFSET_MS = 5000;
 
 const PANEL_POSITIONS = new Set(['left', 'center', 'right']);
 const FALLBACK_MODES = new Set(['track', 'idle', 'hidden']);
@@ -68,6 +71,7 @@ export function normalizeSettings(raw) {
     textShadowEnabled: normalizeBoolean(raw.textShadowEnabled, DEFAULT_TEXT_SHADOW_ENABLED),
     glowStrength: normalizeGlowStrength(raw.glowStrength),
     autoWidth: normalizeBoolean(raw.autoWidth, DEFAULT_AUTO_WIDTH),
+    syncOffsetMs: normalizeSyncOffsetMs(raw.syncOffsetMs),
   };
 }
 
@@ -185,4 +189,16 @@ export function normalizeLyricsSource(value) {
   return typeof value === 'string' && LYRICS_SOURCES.has(value)
     ? /** @type {LyricsSource} */ (value)
     : DEFAULT_LYRICS_SOURCE;
+}
+
+/**
+ * @param {unknown} value
+ * @returns {number}
+ */
+export function normalizeSyncOffsetMs(value) {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_SYNC_OFFSET_MS;
+  }
+  const rounded = Math.round(/** @type {number} */ (value));
+  return Math.min(MAX_SYNC_OFFSET_MS, Math.max(MIN_SYNC_OFFSET_MS, rounded));
 }

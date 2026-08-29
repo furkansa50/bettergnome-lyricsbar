@@ -13,7 +13,7 @@ import { buildMusixmatchTokenUrl, buildMusixmatchMacroUrl } from './musixmatch-u
  * @typedef {(result: LyricsProviderResult) => void} LyricsLookupCallback
  */
 
-const DEFAULT_TIMEOUT_MS = 10000;
+const DEFAULT_TIMEOUT_MS = 5000;
 const MUSIXMATCH_USER_AGENT =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Musixmatch/0.19.4 Chrome/58.0.3029.110 Electron/1.7.6 Safari/537.36';
 
@@ -81,6 +81,25 @@ export class MusixmatchProvider {
       }
       this.#session = null;
     });
+
+    this.#userToken = readCachedToken();
+    if (this.#userToken) {
+      this.#logger?.debug('musixmatch-token-loaded-from-cache');
+    }
+  }
+
+  /**
+   * Pre-warm the anonymous user token in the background so it is ready
+   * before the first lyric lookup is triggered.
+   *
+   * @returns {void}
+   */
+  prewarm() {
+    if (!this.#enabled || this.#userToken !== null) {
+      return;
+    }
+    this.#logger?.debug('musixmatch-token-prewarm');
+    this.#ensureUserToken(() => {});
   }
 
   /**
@@ -162,6 +181,7 @@ export class MusixmatchProvider {
       if (httpResult.statusCode === 401 && !isRetry) {
         this.#logger?.debug('musixmatch-token-expired');
         this.#userToken = null;
+        deleteCachedToken();
         this.#ensureUserToken((freshToken) => {
           if (!this.#enabled || !freshToken) {
             callback(Object.freeze({ kind: 'not-found' }));
@@ -229,6 +249,9 @@ export class MusixmatchProvider {
       }
 
       this.#userToken = fetchedToken;
+      if (fetchedToken !== null) {
+        writeCachedToken(fetchedToken);
+      }
       const waiters = this.#tokenWaiters ?? [];
       this.#tokenWaiters = null;
 
@@ -369,4 +392,88 @@ function describeError(value) {
     return value.message;
   }
   return String(value);
+}
+
+/**
+ * @returns {string | null}
+ */
+function readCachedToken() {
+  try {
+    if (
+      typeof GLib?.get_user_cache_dir !== 'function' ||
+      typeof GLib?.file_get_contents !== 'function'
+    ) {
+      return null;
+    }
+    const userCacheDir = GLib.get_user_cache_dir();
+    if (!userCacheDir) {
+      return null;
+    }
+    const tokenFile = GLib.build_filenamev([userCacheDir, 'lyricbar', 'musixmatch-token.json']);
+    const [ok, contents] = GLib.file_get_contents(tokenFile);
+    if (!ok || !contents) {
+      return null;
+    }
+    const decoder = new TextDecoder('utf-8');
+    const raw = readBytes(contents);
+    const parsed = JSON.parse(raw || decoder.decode(/** @type {Uint8Array} */ (contents)));
+    if (
+      typeof parsed?.token === 'string' &&
+      parsed.token !== '' &&
+      !parsed.token.includes('UpgradeOnly')
+    ) {
+      return parsed.token;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {string} token
+ * @returns {void}
+ */
+function writeCachedToken(token) {
+  try {
+    if (
+      typeof GLib?.get_user_cache_dir !== 'function' ||
+      typeof GLib?.file_set_contents !== 'function'
+    ) {
+      return;
+    }
+    const userCacheDir = GLib.get_user_cache_dir();
+    if (!userCacheDir) {
+      return;
+    }
+    const dir = GLib.build_filenamev([userCacheDir, 'lyricbar']);
+    if (typeof GLib.mkdir_with_parents === 'function') {
+      GLib.mkdir_with_parents(dir, 0o755);
+    }
+    const tokenFile = GLib.build_filenamev([dir, 'musixmatch-token.json']);
+    const payload = JSON.stringify({ token, savedAt: Date.now() });
+    const encoder = new TextEncoder();
+    GLib.file_set_contents(tokenFile, encoder.encode(payload));
+  } catch {
+    // Silently ignore write failures
+  }
+}
+
+/**
+ * @returns {void}
+ */
+function deleteCachedToken() {
+  try {
+    if (typeof GLib?.get_user_cache_dir !== 'function' || typeof GLib?.unlink !== 'function') {
+      return;
+    }
+    const userCacheDir = GLib.get_user_cache_dir();
+    if (!userCacheDir) {
+      return;
+    }
+    const tokenFile = GLib.build_filenamev([userCacheDir, 'lyricbar', 'musixmatch-token.json']);
+    GLib.unlink(tokenFile);
+  } catch {
+    // Silently ignore
+  }
 }
