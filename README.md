@@ -155,6 +155,10 @@ If the panel is blank, lyrics do not sync, or the wrong player is selected, see 
 - [Runtime evidence workflow](docs/harness/runtime-evidence.md)
 - [Release checklist](docs/operations/release-checklist.md)
 
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+
 ## Acknowledgements
 
 Better Lyrics Bar builds upon and integrates with the work of several fantastic open-source projects and services:
