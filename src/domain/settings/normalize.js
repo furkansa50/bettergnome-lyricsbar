@@ -64,6 +64,7 @@ export function normalizeSettings(raw) {
     playerPriority: normalizePlayerPriority(raw.playerPriority),
     browserPlayerService: normalizeBrowserPlayerService(raw.browserPlayerService),
     lyricsSource: normalizeLyricsSource(raw.lyricsSource),
+    musixmatchToken: normalizeMusixmatchToken(raw.musixmatchToken),
     cacheEnabled: normalizeBoolean(raw.cacheEnabled, true),
     debugLogging: normalizeBoolean(raw.debugLogging, false),
     textColorMode: normalizeTextColorMode(raw.textColorMode),
@@ -189,6 +190,122 @@ export function normalizeLyricsSource(value) {
   return typeof value === 'string' && LYRICS_SOURCES.has(value)
     ? /** @type {LyricsSource} */ (value)
     : DEFAULT_LYRICS_SOURCE;
+}
+
+// Musixmatch no longer issues anonymous tokens; users paste the token of their
+// logged-in musixmatch.com session. Accept the bare token, the raw
+// `musixmatchUserToken` cookie value (URL-encoded JSON mapping app ids to
+// tokens) or an HTML snippet embedding `"userToken":"..."`.
+const MUSIXMATCH_TOKEN_RE = /^[\w-]{16,}$/;
+const MUSIXMATCH_APP_ID_PREFERENCE = ['mxm-com-v1.0', 'web-desktop-app-v1.0'];
+
+/**
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function normalizeMusixmatchToken(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  const text = value.trim();
+  if (text === '') {
+    return '';
+  }
+
+  if (isMusixmatchToken(text)) {
+    return text;
+  }
+
+  const embedded = /userToken"?\s*[:=]\s*"([\w-]{16,})"/.exec(text);
+  if (embedded?.[1] && isMusixmatchToken(embedded[1])) {
+    return embedded[1];
+  }
+
+  const decoded = decodeMusixmatchBlob(text);
+  const found = collectMusixmatchTokens(decoded);
+  const preferred = [...MUSIXMATCH_APP_ID_PREFERENCE, ...found.map((entry) => entry.key)];
+  for (const key of preferred) {
+    const match = found.find((entry) => entry.key === key);
+    if (match) {
+      return match.token;
+    }
+  }
+  return found[0]?.token ?? '';
+}
+
+/**
+ * @param {string} value
+ * @returns {boolean}
+ */
+function isMusixmatchToken(value) {
+  return MUSIXMATCH_TOKEN_RE.test(value) && !/^0+$/.test(value);
+}
+
+/**
+ * Repeatedly URL-decodes / JSON-parses a pasted blob until it stops changing,
+ * mirroring how musixmatch.com nests the cookie value.
+ *
+ * @param {string} raw
+ * @returns {unknown}
+ */
+function decodeMusixmatchBlob(raw) {
+  let value = /** @type {unknown} */ (raw);
+  for (let round = 0; round < 4; round += 1) {
+    if (typeof value !== 'string') {
+      return value;
+    }
+    try {
+      const urlDecoded = decodeURIComponent(value);
+      if (urlDecoded !== value) {
+        value = urlDecoded;
+        continue;
+      }
+    } catch {
+      // not URL-encoded
+    }
+    try {
+      const jsonDecoded = JSON.parse(/** @type {string} */ (value));
+      if (jsonDecoded !== value) {
+        value = jsonDecoded;
+        continue;
+      }
+    } catch {
+      // not JSON
+    }
+    break;
+  }
+  return value;
+}
+
+/**
+ * @param {unknown} value
+ * @param {string} key
+ * @param {{ key: string, token: string }[]} out
+ * @param {number} depth
+ * @returns {{ key: string, token: string }[]}
+ */
+function collectMusixmatchTokens(value, key = '', out = [], depth = 0) {
+  if (depth > 8) {
+    return out;
+  }
+  if (typeof value === 'string') {
+    if (isMusixmatchToken(value)) {
+      out.push({ key, token: value });
+    }
+    return out;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectMusixmatchTokens(item, key, out, depth + 1);
+    }
+    return out;
+  }
+  if (value && typeof value === 'object') {
+    for (const [childKey, childValue] of Object.entries(value)) {
+      collectMusixmatchTokens(childValue, childKey, out, depth + 1);
+    }
+  }
+  return out;
 }
 
 /**

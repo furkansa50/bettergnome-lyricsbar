@@ -22,6 +22,7 @@ describe('SettingsAdapter', () => {
       playerPriority: ['spotify'],
       browserPlayerService: 'auto',
       lyricsSource: 'musixmatch',
+      musixmatchToken: '',
       cacheEnabled: true,
       debugLogging: false,
       textColorMode: 'default',
@@ -41,16 +42,16 @@ describe('SettingsAdapter', () => {
 
     adapter.subscribe(callback);
 
-    expect(backend.connect).toHaveBeenCalledTimes(17);
+    expect(backend.connect).toHaveBeenCalledTimes(18);
     backend.emit('changed::max-width');
 
     expect(callback).toHaveBeenCalledWith(adapter.read());
 
     lifecycle.dispose();
 
-    expect(backend.disconnect).toHaveBeenCalledTimes(17);
-    expect(backend.disconnect).toHaveBeenNthCalledWith(1, 17);
-    expect(backend.disconnect).toHaveBeenNthCalledWith(17, 1);
+    expect(backend.disconnect).toHaveBeenCalledTimes(18);
+    expect(backend.disconnect).toHaveBeenNthCalledWith(1, 18);
+    expect(backend.disconnect).toHaveBeenNthCalledWith(18, 1);
   });
 
   it('sets lyrics source on the underlying settings backend', () => {

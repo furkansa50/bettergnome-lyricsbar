@@ -2,8 +2,12 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Soup from 'gi://Soup';
 
-import { mapHttpResultToProviderResult, mapHttpResultToSyncedSearchResult } from './http-result.js';
-import { buildLrclibSearchUrl, buildLrclibUrl } from './url.js';
+import {
+  mapHttpResultToProviderResult,
+  mapHttpResultToSyncedSearchResult,
+  mapHttpResultToSyncedTitleSearchResult,
+} from './http-result.js';
+import { buildLrclibSearchUrl, buildLrclibTitleSearchUrl, buildLrclibUrl } from './url.js';
 
 /**
  * @import { LifecycleRegistry } from '../lifecycle.js'
@@ -94,11 +98,10 @@ export class LrclibProvider {
         return;
       }
 
-      if (providerResult.kind !== 'plain' && providerResult.kind !== 'not-found') {
-        callback(providerResult);
-        return;
-      }
-
+      // Transient exact-lookup failures (5xx rate limits, timeouts) must not
+      // skip the search fallback — it is a separate endpoint with separate
+      // throttling. When the fallback also misses, the original error is
+      // reported so the caller does not cache a false negative.
       this.#lookupSyncedSearchFallback(query, providerResult, callback);
     });
   }
@@ -112,7 +115,7 @@ export class LrclibProvider {
   #lookupSyncedSearchFallback(query, fallback, callback) {
     const searchUrl = buildLrclibSearchUrl(query);
     if (searchUrl === null) {
-      callback(fallback);
+      this.#lookupTitleSearchFallback(query, fallback, callback);
       return;
     }
 
@@ -125,7 +128,7 @@ export class LrclibProvider {
       const searchResult = mapHttpResultToSyncedSearchResult(httpResult, query);
       if (searchResult === null) {
         this.#logger?.debug('search-fallback-result', { kind: 'none' });
-        callback(fallback);
+        this.#lookupTitleSearchFallback(query, fallback, callback);
         return;
       }
 
@@ -134,6 +137,41 @@ export class LrclibProvider {
         title: searchResult.track.trackName,
       });
       callback(searchResult);
+    });
+  }
+
+  /**
+   * Second-stage fallback: the player's artist spelling disagrees with
+   * LRCLIB's records (transliterations, traditional vs simplified Chinese,
+   * featuring variants), so search by title alone and score strictly.
+   *
+   * @param {LyricsQuery} query
+   * @param {LyricsProviderResult} fallback
+   * @param {LyricsLookupCallback} callback
+   * @returns {void}
+   */
+  #lookupTitleSearchFallback(query, fallback, callback) {
+    const titleUrl = buildLrclibTitleSearchUrl(query);
+    if (titleUrl === null) {
+      callback(fallback);
+      return;
+    }
+
+    this.#logger?.debug('title-search-fallback-start', { title: query.title });
+
+    this.#send(titleUrl, (httpResult) => {
+      const titleResult = mapHttpResultToSyncedTitleSearchResult(httpResult, query);
+      if (titleResult === null) {
+        this.#logger?.debug('title-search-fallback-result', { kind: 'none' });
+        callback(fallback);
+        return;
+      }
+
+      this.#logger?.debug('title-search-fallback-result', {
+        kind: titleResult.kind,
+        title: titleResult.track.trackName,
+      });
+      callback(titleResult);
     });
   }
 

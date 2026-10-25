@@ -181,6 +181,15 @@ describe('parseCacheEntry', () => {
 });
 
 describe('shouldWriteLyricsCache', () => {
+  it('never caches transport error results', () => {
+    const errorResult =
+      /** @type {import('../../src/domain/lyrics/types.js').LyricsProviderResult} */ (
+        Object.freeze({ kind: 'error', reason: 'request timed out' })
+      );
+    expect(shouldWriteLyricsCache(playerSnapshot({}), errorResult)).toBe(false);
+    expect(shouldWriteLyricsCache(null, errorResult)).toBe(false);
+  });
+
   it('allows desktop not-found results to be cached', () => {
     expect(shouldWriteLyricsCache(playerSnapshot({}), notFoundResult)).toBe(true);
   });

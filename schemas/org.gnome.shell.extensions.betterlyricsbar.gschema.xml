@@ -52,6 +52,11 @@
       <summary>Lyrics source</summary>
       <description>Preferred lyrics source provider ('musixmatch', 'better-lyrics', or 'lrclib').</description>
     </key>
+    <key name="musixmatch-token" type="s">
+      <default>''</default>
+      <summary>Musixmatch login token</summary>
+      <description>User token from a logged-in musixmatch.com session. Musixmatch no longer issues anonymous tokens, so lyrics lookups need this.</description>
+    </key>
     <key name="cache-enabled" type="b">
       <default>true</default>
       <summary>Cache lyrics</summary>

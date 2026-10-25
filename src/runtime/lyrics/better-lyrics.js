@@ -15,7 +15,9 @@ import { MusixmatchProvider } from './musixmatch.js';
  * @typedef {(result: LyricsProviderResult) => void} LyricsLookupCallback
  */
 
-const DEFAULT_TIMEOUT_MS = 5000;
+// 10s keeps the fallback chain resilient on slow routes (e.g. proxied
+// LRCLIB) while still failing over fast enough for a live lyric bar.
+const DEFAULT_TIMEOUT_MS = 10000;
 const USER_AGENT = 'betterlyricsbar/1.1.1 (+https://github.com/furkansa50/bettergnome-lyricsbar)';
 
 export class BetterLyricsProvider {
@@ -54,7 +56,7 @@ export class BetterLyricsProvider {
 
   /**
    * @param {LifecycleRegistry} lifecycle
-   * @param {{ session?: any, timeoutMs?: number, logger?: RuntimeLogger | undefined, getLyricsSource?: () => import('../../domain/settings/types.js').LyricsSource }} [options]
+   * @param {{ session?: any, timeoutMs?: number, logger?: RuntimeLogger | undefined, getLyricsSource?: () => import('../../domain/settings/types.js').LyricsSource, getMusixmatchToken?: () => string }} [options]
    */
   constructor(lifecycle, options = {}) {
     this.#lifecycle = lifecycle;
@@ -79,8 +81,12 @@ export class BetterLyricsProvider {
     });
 
     this.#musixmatchProvider = new MusixmatchProvider(this.#lifecycle, {
-      session: this.#session,
-      timeoutMs: this.#timeoutMs,
+      // Production builds its own browser-UA session with longer timeouts
+      // (the signing key ships inside a ~3MB JS bundle); tests inject a mock
+      // session through the shared option.
+      session: options.session,
+      timeoutMs: 20000,
+      getMusixmatchToken: options.getMusixmatchToken ?? (() => ''),
       logger: this.#logger ? this.#logger.child('musixmatch') : undefined,
     });
 
@@ -202,9 +208,17 @@ export class BetterLyricsProvider {
    * @returns {void}
    */
   #lookupBetterLyrics(query, callback, allowLrclibFallback) {
+    // In the default chain Musixmatch has already missed; do not query it twice.
+    const onMiss = () => {
+      if (allowLrclibFallback) {
+        this.#fallbackToLrclib(query, callback, true);
+      } else {
+        this.#lookupMusixmatch(query, callback, false);
+      }
+    };
     const url = buildBetterLyricsUrl(query);
     if (url === null) {
-      this.#lookupMusixmatch(query, callback, allowLrclibFallback);
+      onMiss();
       return;
     }
 
@@ -229,8 +243,8 @@ export class BetterLyricsProvider {
         return;
       }
 
-      // Better Lyrics miss (404 / 401 / not-found / error) -> try Musixmatch next.
-      this.#lookupMusixmatch(query, callback, allowLrclibFallback);
+      // Better Lyrics selection tries Musixmatch; the default chain proceeds to LRCLIB.
+      onMiss();
     });
   }
 

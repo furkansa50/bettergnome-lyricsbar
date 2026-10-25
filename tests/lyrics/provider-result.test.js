@@ -259,7 +259,10 @@ describe('parseBestSyncedLrclibSearchResponse', () => {
     }
   });
 
-  it('rejects synced search candidates with a duration that is too far from the active track', () => {
+  it('accepts synced search candidates from a different release within the tolerance window', () => {
+    // 262s vs 244.3s (~18s gap): same song, different release — the fuzzy
+    // fallback must not require near-exact durations once artist and title
+    // already matched.
     const result = parseBestSyncedLrclibSearchResponse(
       [
         {
@@ -267,6 +270,28 @@ describe('parseBestSyncedLrclibSearchResponse', () => {
           artistName: 'NDX A.K.A.',
           albumName: 'NDX A.K.A. Familia',
           duration: 262,
+          syncedLyrics: '[00:09.48] Kowe tau neng uripku',
+        },
+      ],
+      {
+        artist: 'NDX A.K.A.',
+        title: 'Tewas Tertimbun Masa Lalu (TTM)',
+        album: 'NDX A.K.A. Familia',
+        durationMs: 244297,
+      },
+    );
+
+    expect(result?.kind).toBe('synced');
+  });
+
+  it('rejects synced search candidates with a duration that is too far from the active track', () => {
+    const result = parseBestSyncedLrclibSearchResponse(
+      [
+        {
+          trackName: 'Tewas Tertimbun Masa Lalu',
+          artistName: 'NDX A.K.A.',
+          albumName: 'NDX A.K.A. Familia',
+          duration: 285,
           syncedLyrics: '[00:09.48] Kowe tau neng uripku',
         },
       ],

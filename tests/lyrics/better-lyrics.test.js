@@ -42,6 +42,8 @@ vi.mock('gi://Soup', () => ({
 import { BetterLyricsProvider } from '../../src/runtime/lyrics/better-lyrics.js';
 import { LifecycleRegistry } from '../../src/runtime/lifecycle.js';
 
+const MUSIXMATCH_TEST_TOKEN = 'test-token-1234567890abcdef';
+
 describe('BetterLyricsProvider source switching', () => {
   const query = {
     title: 'Yellow',
@@ -87,9 +89,12 @@ describe('BetterLyricsProvider source switching', () => {
     const callback = vi.fn();
     provider.lookup(query, callback);
 
-    expect(sentUrls).toHaveLength(2);
-    expect(sentUrls[0]).toContain('lrclib.net');
-    expect(sentUrls[1]).toContain('lrclib.net');
+    expect(sentUrls).toHaveLength(3);
+    expect(sentUrls[0]).toContain('lrclib.net/api/get');
+    expect(sentUrls[1]).toContain('artist_name=');
+    // a miss on the artist+title search falls through to the title-only search
+    expect(sentUrls[2]).toContain('track_name=');
+    expect(sentUrls[2]).not.toContain('artist_name=');
     expect(callback).toHaveBeenCalledWith({ kind: 'not-found' });
   });
 
@@ -102,13 +107,14 @@ describe('BetterLyricsProvider source switching', () => {
     const provider = new BetterLyricsProvider(lifecycle, {
       session: mockSession,
       getLyricsSource: () => 'better-lyrics',
+      getMusixmatchToken: () => MUSIXMATCH_TEST_TOKEN,
     });
 
     const callback = vi.fn();
     provider.lookup(query, callback);
 
     expect(sentUrls[0]).toContain('lyrics-api.boidu.dev');
-    expect(sentUrls.some((url) => url.includes('apic-desktop.musixmatch.com'))).toBe(true);
+    expect(sentUrls.some((url) => url.includes('www.musixmatch.com'))).toBe(true);
     expect(sentUrls.some((url) => url.includes('lrclib.net'))).toBe(false);
     expect(callback).toHaveBeenCalledWith({ kind: 'not-found' });
   });
@@ -122,18 +128,19 @@ describe('BetterLyricsProvider source switching', () => {
     const provider = new BetterLyricsProvider(lifecycle, {
       session: mockSession,
       getLyricsSource: () => 'musixmatch',
+      getMusixmatchToken: () => MUSIXMATCH_TEST_TOKEN,
     });
 
     const callback = vi.fn();
     provider.lookup(query, callback);
 
-    expect(sentUrls.some((url) => url.includes('apic-desktop.musixmatch.com'))).toBe(true);
+    expect(sentUrls.some((url) => url.includes('www.musixmatch.com'))).toBe(true);
     expect(sentUrls.some((url) => url.includes('lyrics-api.boidu.dev'))).toBe(true);
     expect(sentUrls.some((url) => url.includes('lrclib.net'))).toBe(true);
     expect(callback).toHaveBeenCalledWith({ kind: 'not-found' });
   });
 
-  it('prewarms Musixmatch token when lyricsSource is "musixmatch"', () => {
+  it('prewarms the Musixmatch signing key when lyricsSource is "musixmatch"', () => {
     /** @type {string[]} */
     const sentUrls = [];
     const mockSession = createMockSession(sentUrls);
@@ -142,11 +149,12 @@ describe('BetterLyricsProvider source switching', () => {
     const provider = new BetterLyricsProvider(lifecycle, {
       session: mockSession,
       getLyricsSource: () => 'musixmatch',
+      getMusixmatchToken: () => MUSIXMATCH_TEST_TOKEN,
     });
 
     provider.prewarm();
     expect(sentUrls).toHaveLength(1);
-    expect(sentUrls[0]).toContain('token.get');
+    expect(sentUrls[0]).toContain('www.musixmatch.com/search');
   });
 
   it('does not prewarm Musixmatch token when lyricsSource is "lrclib"', () => {

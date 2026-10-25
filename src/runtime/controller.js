@@ -717,6 +717,7 @@ export class LyricBarController {
     const logger = this.#logger?.child('lyrics');
     const provider = new BetterLyricsProvider(lifecycle, {
       getLyricsSource: () => this.#currentSettings?.lyricsSource ?? 'musixmatch',
+      getMusixmatchToken: () => this.#currentSettings?.musixmatchToken ?? '',
       logger: logger?.child('better-lyrics'),
     });
     provider.prewarm();

@@ -17,6 +17,7 @@ const baseSettings = {
   playerPriority: ['spotify'],
   browserPlayerService: 'auto',
   lyricsSource: 'musixmatch',
+  musixmatchToken: '',
   cacheEnabled: true,
   debugLogging: false,
   textColorMode: 'default',

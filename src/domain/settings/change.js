@@ -38,7 +38,9 @@ export function shouldRefreshSettingsAccess(previous, next) {
  * @returns {boolean}
  */
 export function shouldRefreshLyricsQuery(previous, next) {
-  return previous.lyricsSource !== next.lyricsSource;
+  return (
+    previous.lyricsSource !== next.lyricsSource || previous.musixmatchToken !== next.musixmatchToken
+  );
 }
 
 /**

@@ -2,8 +2,22 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Soup from 'gi://Soup';
 
-import { parseMusixmatchResponse } from '../../domain/lyrics/musixmatch.js';
-import { buildMusixmatchTokenUrl, buildMusixmatchMacroUrl } from './musixmatch-url.js';
+import {
+  parseMusixmatchLyricsResponse,
+  parseMusixmatchSearchResponse,
+  parseMusixmatchSubtitleResponse,
+  pickMusixmatchTrack,
+} from '../../domain/lyrics/musixmatch.js';
+import {
+  DEFAULT_APP_ID,
+  MUSIXMATCH_ORIGIN,
+  buildMusixmatchApiUrl,
+  buildSearchPageUrl,
+  decodeSigningSecret,
+  extractAppScriptUrl,
+  extractAppVersion,
+  extractSigningSecretEncoded,
+} from './musixmatch-url.js';
 
 /**
  * @import { LifecycleRegistry } from '../lifecycle.js'
@@ -13,9 +27,22 @@ import { buildMusixmatchTokenUrl, buildMusixmatchMacroUrl } from './musixmatch-u
  * @typedef {(result: LyricsProviderResult) => void} LyricsLookupCallback
  */
 
-const DEFAULT_TIMEOUT_MS = 5000;
-const MUSIXMATCH_USER_AGENT =
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Musixmatch/0.19.4 Chrome/58.0.3029.110 Electron/1.7.6 Safari/537.36';
+const DEFAULT_TIMEOUT_MS = 20000;
+// The signing key is shipped inside musixmatch.com's JS bundle and rotates;
+// cache it for a few hours before fetching a fresh one.
+const SECRET_TTL_MS = 6 * 60 * 60 * 1000;
+
+// The site serves its JS to plain browsers; the extension must look like one.
+const BROWSER_USER_AGENT =
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
+
+/**
+ * @typedef {Readonly<{
+ *   secret: string,
+ *   version: string | null,
+ *   savedAt: number,
+ * }>} SigningSecret
+ */
 
 export class MusixmatchProvider {
   /** @type {any} */
@@ -33,15 +60,18 @@ export class MusixmatchProvider {
   /** @type {RuntimeLogger | null} */
   #logger = null;
 
-  /** @type {string | null} */
-  #userToken = null;
+  /** @type {() => string} */
+  #getMusixmatchToken;
+
+  /** @type {SigningSecret | null} */
+  #secret;
 
   /**
-   * In-flight token fetch callback queue.
+   * In-flight secret load callback queue.
    *
-   * @type {((token: string | null) => void)[] | null}
+   * @type {((ok: boolean) => void)[] | null}
    */
-  #tokenWaiters = null;
+  #secretWaiters = null;
 
   /**
    * In-flight HTTP requests.
@@ -52,19 +82,27 @@ export class MusixmatchProvider {
 
   /**
    * @param {LifecycleRegistry} lifecycle
-   * @param {{ session?: any, timeoutMs?: number, logger?: RuntimeLogger | undefined }} [options]
+   * @param {{
+   *   session?: any,
+   *   timeoutMs?: number,
+   *   logger?: RuntimeLogger | undefined,
+   *   getMusixmatchToken?: () => string,
+   * }} [options]
    */
   constructor(lifecycle, options = {}) {
     this.#lifecycle = lifecycle;
     this.#timeoutMs =
       typeof options.timeoutMs === 'number' ? options.timeoutMs : DEFAULT_TIMEOUT_MS;
     this.#logger = options.logger ?? null;
+    this.#getMusixmatchToken = options.getMusixmatchToken ?? (() => '');
 
     if (options.session) {
       this.#session = options.session;
     } else {
+      // Own session: requests go to www.musixmatch.com with a browser UA and
+      // need more headroom than the shared 5s session (JS bundle is ~3MB).
       this.#session = new Soup.Session({
-        user_agent: MUSIXMATCH_USER_AGENT,
+        user_agent: BROWSER_USER_AGENT,
         timeout: Math.max(1, Math.round(this.#timeoutMs / 1000)),
       });
     }
@@ -73,7 +111,7 @@ export class MusixmatchProvider {
       this.#logger?.debug('musixmatch-provider-dispose');
       this.#enabled = false;
       this.#abortInflight();
-      this.#tokenWaiters = null;
+      this.#secretWaiters = null;
       try {
         this.#session?.abort?.();
       } catch {
@@ -82,45 +120,28 @@ export class MusixmatchProvider {
       this.#session = null;
     });
 
-    this.#userToken = readCachedToken();
-    if (this.#userToken) {
-      this.#logger?.debug('musixmatch-token-loaded-from-cache');
+    this.#secret = readCachedSecret();
+    if (this.#secret) {
+      this.#logger?.debug('musixmatch-secret-loaded-from-cache');
     }
   }
 
   /**
-   * Pre-warm the anonymous user token in the background so it is ready
-   * before the first lyric lookup is triggered.
+   * Pre-warm the request-signing key so the first lookup does not pay for the
+   * search page + JS bundle round trip.
    *
    * @returns {void}
    */
   prewarm() {
-    if (!this.#enabled || this.#userToken !== null) {
+    if (!this.#enabled || this.#getMusixmatchToken() === '') {
       return;
     }
-    this.#logger?.debug('musixmatch-token-prewarm');
-    this.#ensureUserToken(() => {});
+    this.#logger?.debug('musixmatch-secret-prewarm');
+    this.#ensureSecret(() => {});
   }
 
   /**
-   * Cancel every in-flight request and drop its timeout source.
-   *
-   * @returns {void}
-   */
-  #abortInflight() {
-    for (const entry of [...this.#inflight]) {
-      this.#inflight.delete(entry);
-      entry.cancelTimeout();
-      try {
-        entry.cancellable.cancel();
-      } catch {
-        // already cancelled
-      }
-    }
-  }
-
-  /**
-   * Lookup lyrics on Musixmatch.
+   * Lookup lyrics on Musixmatch's signed web API.
    *
    * @param {LyricsQuery} query
    * @param {LyricsLookupCallback} callback
@@ -132,17 +153,29 @@ export class MusixmatchProvider {
       return;
     }
 
-    this.#ensureUserToken((token) => {
+    const token = this.#getMusixmatchToken();
+    if (token === '') {
+      // Anonymous tokens are no longer issued; without a login token the
+      // provider simply yields to the next source in the chain.
+      this.#logger?.debug('musixmatch-token-missing');
+      callback(Object.freeze({ kind: 'not-found' }));
+      return;
+    }
+
+    this.#ensureSecret((ok) => {
       if (!this.#enabled) {
         return;
       }
-
-      if (!token) {
-        this.#logger?.debug('musixmatch-token-failed');
-        callback(Object.freeze({ kind: 'not-found' }));
+      if (!ok) {
+        this.#logger?.debug('musixmatch-secret-failed');
+        callback(
+          Object.freeze({
+            kind: 'error',
+            reason: 'musixmatch init failed (network or site layout changed)',
+          }),
+        );
         return;
       }
-
       this.#performLookup(query, token, callback, false);
     });
   }
@@ -151,11 +184,26 @@ export class MusixmatchProvider {
    * @param {LyricsQuery} query
    * @param {string} token
    * @param {LyricsLookupCallback} callback
-   * @param {boolean} isRetry
+   * @param {boolean} authRetried
    * @returns {void}
    */
-  #performLookup(query, token, callback, isRetry) {
-    const url = buildMusixmatchMacroUrl(query, token);
+  #performLookup(query, token, callback, authRetried) {
+    // NOTE: no q_duration here — musixmatch applies it as a hard filter that
+    // zeroes out otherwise correct results; duration is scored locally when
+    // picking the candidate instead.
+    const searchParams = {
+      app_id: DEFAULT_APP_ID,
+      format: 'json',
+      usertoken: token,
+      q_track: query.title,
+      q_artist: query.artist,
+      f_has_lyrics: 'true',
+      s_track_rating: 'desc',
+      page_size: '10',
+      page: '1',
+    };
+
+    const url = buildMusixmatchApiUrl('track.search', searchParams);
     if (url === null) {
       callback(Object.freeze({ kind: 'not-found' }));
       return;
@@ -166,7 +214,7 @@ export class MusixmatchProvider {
       artist: query.artist,
     });
 
-    this.#send(url, (httpResult) => {
+    this.#sendSigned(url, (httpResult) => {
       if (!this.#enabled) {
         return;
       }
@@ -177,99 +225,328 @@ export class MusixmatchProvider {
         return;
       }
 
-      // If token expired (401), clear and retry once
-      if (httpResult.statusCode === 401 && !isRetry) {
-        this.#logger?.debug('musixmatch-token-expired');
-        this.#userToken = null;
-        deleteCachedToken();
-        this.#ensureUserToken((freshToken) => {
-          if (!this.#enabled || !freshToken) {
-            callback(Object.freeze({ kind: 'not-found' }));
-            return;
-          }
-          this.#performLookup(query, freshToken, callback, true);
+      let parsed = /** @type {any} */ (null);
+      try {
+        parsed = JSON.parse(httpResult.body ?? '');
+      } catch {
+        callback(Object.freeze({ kind: 'error', reason: 'invalid json response' }));
+        return;
+      }
+
+      if (
+        httpResult.statusCode === 401 ||
+        httpResult.statusCode === 403 ||
+        isAuthRejected(parsed)
+      ) {
+        this.#handleAuthRejection(token, query, callback, authRetried, () => {
+          this.#performLookup(query, token, callback, true);
         });
         return;
       }
 
-      /** @type {ProviderTrackInfo} */
-      const track = {
-        trackName: query.title,
-        artistName: query.artist,
-        albumName: query.album,
-        durationMs: query.durationMs,
-      };
-
-      const result = parseMusixmatchResponse(httpResult.body ?? '', track);
-      this.#logger?.debug('musixmatch-result', { kind: result.kind });
-      callback(result);
-    });
-  }
-
-  /**
-   * Retrieve a cached token or fetch a new one.
-   *
-   * @param {(token: string | null) => void} onToken
-   * @returns {void}
-   */
-  #ensureUserToken(onToken) {
-    if (this.#userToken !== null) {
-      onToken(this.#userToken);
-      return;
-    }
-
-    if (this.#tokenWaiters !== null) {
-      this.#tokenWaiters.push(onToken);
-      return;
-    }
-
-    this.#tokenWaiters = [onToken];
-    const url = buildMusixmatchTokenUrl();
-
-    this.#send(url, (httpResult) => {
-      if (!this.#enabled) {
+      const tracks = parseMusixmatchSearchResponse(parsed);
+      const track = pickMusixmatchTrack(tracks, query);
+      if (track === null) {
+        this.#logger?.debug('musixmatch-no-track', { candidates: tracks.length });
+        callback(Object.freeze({ kind: 'not-found' }));
         return;
       }
 
-      let fetchedToken = null;
-      if (httpResult.statusCode === 200 && typeof httpResult.body === 'string') {
-        try {
-          const parsed = JSON.parse(httpResult.body);
-          const tokenCandidate = parsed?.message?.body?.user_token;
-          if (
-            typeof tokenCandidate === 'string' &&
-            tokenCandidate !== '' &&
-            !tokenCandidate.includes('UpgradeOnly')
-          ) {
-            fetchedToken = tokenCandidate;
-          }
-        } catch {
-          // invalid JSON
-        }
-      }
+      const /** @type {ProviderTrackInfo} */ trackInfo = {
+          trackName: track.trackName || query.title,
+          artistName: track.artistName || query.artist,
+          albumName: query.album,
+          durationMs: query.durationMs,
+        };
 
-      this.#userToken = fetchedToken;
-      if (fetchedToken !== null) {
-        writeCachedToken(fetchedToken);
+      if (track.hasSubtitles) {
+        this.#fetchSubtitle(token, track.trackId, trackInfo, callback, authRetried);
+        return;
       }
-      const waiters = this.#tokenWaiters ?? [];
-      this.#tokenWaiters = null;
-
-      for (const waiter of waiters) {
-        waiter(fetchedToken);
+      if (track.hasLyrics) {
+        this.#fetchLyrics(token, track.trackId, trackInfo, callback, authRetried);
+        return;
       }
+      callback(Object.freeze({ kind: 'not-found' }));
     });
   }
 
   /**
+   * @param {string} token
+   * @param {number} trackId
+   * @param {ProviderTrackInfo} trackInfo
+   * @param {LyricsLookupCallback} callback
+   * @param {boolean} authRetried
+   * @returns {void}
+   */
+  #fetchSubtitle(token, trackId, trackInfo, callback, authRetried) {
+    const url = buildMusixmatchApiUrl('track.subtitles.get', {
+      app_id: DEFAULT_APP_ID,
+      format: 'json',
+      usertoken: token,
+      track_id: String(trackId),
+      subtitle_format: 'lrc',
+    });
+    if (url === null) {
+      callback(Object.freeze({ kind: 'not-found' }));
+      return;
+    }
+
+    this.#sendSigned(url, (httpResult) => {
+      if (!this.#enabled) {
+        return;
+      }
+      if (httpResult.error) {
+        this.#logger?.debug('musixmatch-error', { reason: httpResult.error });
+        callback(Object.freeze({ kind: 'error', reason: httpResult.error }));
+        return;
+      }
+
+      let parsed = /** @type {any} */ (null);
+      try {
+        parsed = JSON.parse(httpResult.body ?? '');
+      } catch {
+        callback(Object.freeze({ kind: 'error', reason: 'invalid json response' }));
+        return;
+      }
+
+      if (
+        httpResult.statusCode === 401 ||
+        httpResult.statusCode === 403 ||
+        isAuthRejected(parsed)
+      ) {
+        this.#handleAuthRejection(token, null, callback, authRetried, () => {
+          this.#fetchSubtitle(token, trackId, trackInfo, callback, true);
+        });
+        return;
+      }
+
+      const result = parseMusixmatchSubtitleResponse(parsed, trackInfo);
+      this.#logger?.debug('musixmatch-result', { kind: result?.kind ?? 'none' });
+      callback(result ?? Object.freeze({ kind: 'not-found' }));
+    });
+  }
+
+  /**
+   * @param {string} token
+   * @param {number} trackId
+   * @param {ProviderTrackInfo} trackInfo
+   * @param {LyricsLookupCallback} callback
+   * @param {boolean} authRetried
+   * @returns {void}
+   */
+  #fetchLyrics(token, trackId, trackInfo, callback, authRetried) {
+    const url = buildMusixmatchApiUrl('track.lyrics.get', {
+      app_id: DEFAULT_APP_ID,
+      format: 'json',
+      usertoken: token,
+      track_id: String(trackId),
+    });
+    if (url === null) {
+      callback(Object.freeze({ kind: 'not-found' }));
+      return;
+    }
+
+    this.#sendSigned(url, (httpResult) => {
+      if (!this.#enabled) {
+        return;
+      }
+      if (httpResult.error) {
+        this.#logger?.debug('musixmatch-error', { reason: httpResult.error });
+        callback(Object.freeze({ kind: 'error', reason: httpResult.error }));
+        return;
+      }
+
+      let parsed = /** @type {any} */ (null);
+      try {
+        parsed = JSON.parse(httpResult.body ?? '');
+      } catch {
+        callback(Object.freeze({ kind: 'error', reason: 'invalid json response' }));
+        return;
+      }
+
+      if (
+        httpResult.statusCode === 401 ||
+        httpResult.statusCode === 403 ||
+        isAuthRejected(parsed)
+      ) {
+        this.#handleAuthRejection(token, null, callback, authRetried, () => {
+          this.#fetchLyrics(token, trackId, trackInfo, callback, true);
+        });
+        return;
+      }
+
+      const result = parseMusixmatchLyricsResponse(parsed, trackInfo);
+      this.#logger?.debug('musixmatch-result', { kind: result?.kind ?? 'none' });
+      callback(result ?? Object.freeze({ kind: 'not-found' }));
+    });
+  }
+
+  /**
+   * Auth rejections (401/403) can come from a rotated signing key OR a bad
+   * login token. Refresh the key once and retry; a persistent rejection is a
+   * token problem the user has to fix.
+   *
+   * @param {string} _token
+   * @param {LyricsQuery | null} _query
+   * @param {LyricsLookupCallback} callback
+   * @param {boolean} authRetried
+   * @param {() => void} retry
+   * @returns {void}
+   */
+  #handleAuthRejection(_token, _query, callback, authRetried, retry) {
+    if (authRetried) {
+      this.#logger?.debug('musixmatch-auth-rejected');
+      callback(
+        Object.freeze({
+          kind: 'error',
+          reason: 'musixmatch auth rejected (check login token)',
+        }),
+      );
+      return;
+    }
+    this.#logger?.debug('musixmatch-auth-retry');
+    this.#loadSecret(true, (ok) => {
+      if (!this.#enabled) {
+        return;
+      }
+      if (!ok) {
+        callback(
+          Object.freeze({
+            kind: 'error',
+            reason: 'musixmatch auth rejected (key refresh failed)',
+          }),
+        );
+        return;
+      }
+      retry();
+    });
+  }
+
+  /**
+   * @param {(ok: boolean) => void} onReady
+   * @returns {void}
+   */
+  #ensureSecret(onReady) {
+    if (this.#secret && Date.now() - this.#secret.savedAt < SECRET_TTL_MS) {
+      onReady(true);
+      return;
+    }
+    this.#loadSecret(false, onReady);
+  }
+
+  /**
+   * @param {boolean} force
+   * @param {(ok: boolean) => void} onReady
+   * @returns {void}
+   */
+  #loadSecret(force, onReady) {
+    if (this.#secretWaiters !== null) {
+      this.#secretWaiters.push(onReady);
+      return;
+    }
+    if (!force && this.#secret && Date.now() - this.#secret.savedAt < SECRET_TTL_MS) {
+      onReady(true);
+      return;
+    }
+
+    this.#secretWaiters = [onReady];
+    const finish = (/** @type {boolean} */ ok) => {
+      const waiters = this.#secretWaiters ?? [];
+      this.#secretWaiters = null;
+      for (const waiter of waiters) {
+        waiter(ok);
+      }
+    };
+
+    this.#send(buildSearchPageUrl(), { cookie: 'mxm_bab=AB' }, (pageResult) => {
+      if (!this.#enabled) {
+        return;
+      }
+      if (pageResult.error || typeof pageResult.body !== 'string') {
+        this.#logger?.debug('musixmatch-secret-page-failed', {
+          reason: pageResult.error ?? 'empty body',
+        });
+        finish(false);
+        return;
+      }
+
+      const appUrl = extractAppScriptUrl(pageResult.body);
+      if (appUrl === null) {
+        this.#logger?.debug('musixmatch-secret-app-script-not-found');
+        finish(false);
+        return;
+      }
+
+      this.#send(appUrl, {}, (jsResult) => {
+        if (!this.#enabled) {
+          return;
+        }
+        if (jsResult.error || typeof jsResult.body !== 'string') {
+          this.#logger?.debug('musixmatch-secret-bundle-failed', {
+            reason: jsResult.error ?? 'empty body',
+          });
+          finish(false);
+          return;
+        }
+
+        const encoded = extractSigningSecretEncoded(jsResult.body);
+        const secret = encoded === null ? null : decodeSigningSecret(encoded);
+        if (encoded === null || secret === null || secret === '') {
+          this.#logger?.debug('musixmatch-secret-key-not-found');
+          finish(false);
+          return;
+        }
+
+        const version = extractAppVersion(appUrl);
+        this.#secret = Object.freeze({ secret, version, savedAt: Date.now() });
+        writeCachedSecret(this.#secret);
+        this.#logger?.debug('musixmatch-secret-loaded', { version });
+        finish(true);
+      });
+    });
+  }
+
+  /**
+   * Append the HMAC-SHA256 signature to an API URL and send it.
+   *
    * @param {string} url
    * @param {(result: { statusCode?: number | null, body?: string | null, error?: string | null }) => void} callback
    * @returns {void}
    */
-  #send(url, callback) {
+  #sendSigned(url, callback) {
+    const secret = this.#secret;
+    if (!secret) {
+      callback(Object.freeze({ statusCode: null, body: null, error: 'signing key not loaded' }));
+      return;
+    }
+
+    const signature = signMusixmatchUrl(url, secret.secret);
+    if (signature === null) {
+      callback(Object.freeze({ statusCode: null, body: null, error: 'signing failed' }));
+      return;
+    }
+
+    this.#send(
+      `${url}&signature=${encodeURIComponent(signature)}&signature_protocol=sha256`,
+      {
+        referer: `${MUSIXMATCH_ORIGIN}/`,
+        appVersion: secret.version,
+      },
+      callback,
+    );
+  }
+
+  /**
+   * @param {string} url
+   * @param {{ cookie?: string, referer?: string, appVersion?: string | null }} extraHeaders
+   * @param {(result: { statusCode?: number | null, body?: string | null, error?: string | null }) => void} callback
+   * @returns {void}
+   */
+  #send(url, extraHeaders, callback) {
     const message = Soup.Message.new('GET', url);
     if (message === null) {
-      callback(Object.freeze({ statusCode: null, body: null, error: 'invalid lookup url' }));
+      callback(Object.freeze({ statusCode: null, body: null, error: 'invalid request url' }));
       return;
     }
 
@@ -305,25 +582,29 @@ export class MusixmatchProvider {
     this.#inflight.add(entry);
 
     const headers = message.get_request_headers?.();
-    headers?.append?.('User-Agent', MUSIXMATCH_USER_AGENT);
-    headers?.append?.('Cookie', 'AWSELB=0; AWSELBCORS=0');
+    if (typeof extraHeaders.cookie === 'string') {
+      headers?.append?.('Cookie', extraHeaders.cookie);
+    }
+    if (typeof extraHeaders.referer === 'string') {
+      headers?.append?.('Referer', extraHeaders.referer);
+    }
+    if (typeof extraHeaders.appVersion === 'string' && extraHeaders.appVersion !== '') {
+      headers?.append?.('x-mxm-app-version', extraHeaders.appVersion);
+    }
 
     const session = this.#session;
     session.send_and_read_async(
       message,
       GLib.PRIORITY_DEFAULT,
       cancellable,
-      /**
-       * @param {unknown} _source
-       * @param {unknown} result
-       * @returns {void}
-       */
+      /** @param {unknown} _source @param {unknown} result */
       (_source, result) => {
         this.#inflight.delete(entry);
         cancelTimeout();
 
         if (!this.#enabled || cancellable.is_cancelled?.() === true) {
           if (timedOut) {
+            this.#logger?.debug('request-timeout');
             callback(Object.freeze({ statusCode: null, body: null, error: 'request timed out' }));
           }
           return;
@@ -349,6 +630,150 @@ export class MusixmatchProvider {
       },
     );
   }
+
+  /**
+   * @returns {void}
+   */
+  #abortInflight() {
+    for (const entry of [...this.#inflight]) {
+      this.#inflight.delete(entry);
+      entry.cancelTimeout();
+      try {
+        entry.cancellable.cancel();
+      } catch {
+        // already cancelled
+      }
+    }
+  }
+}
+
+/**
+ * HMAC-SHA256 of `url + local YYYYMMDD` with the site's signing key,
+ * base64-encoded (same scheme musixmatch.com's own frontend uses).
+ *
+ * @param {string} url
+ * @param {string} secret
+ * @returns {string | null}
+ */
+function signMusixmatchUrl(url, secret) {
+  const now = new Date();
+  const date =
+    `${now.getFullYear()}` +
+    `${String(now.getMonth() + 1).padStart(2, '0')}` +
+    `${String(now.getDate()).padStart(2, '0')}`;
+
+  try {
+    const encoder = new TextEncoder();
+    const key = encoder.encode(secret);
+    const data = encoder.encode(url + date);
+    const hex = GLib.compute_hmac_for_data(GLib.ChecksumType.SHA256, key, data);
+    const digest = hexToBytes(hex);
+    if (digest === null) {
+      return null;
+    }
+    return GLib.base64_encode(digest);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {string} hex
+ * @returns {number[] | null}
+ */
+function hexToBytes(hex) {
+  if (typeof hex !== 'string' || hex.length % 2 !== 0) {
+    return null;
+  }
+  /** @type {number[]} */
+  const bytes = [];
+  for (let i = 0; i < hex.length; i += 2) {
+    const byte = Number.parseInt(hex.slice(i, i + 2), 16);
+    if (!Number.isFinite(byte)) {
+      return null;
+    }
+    bytes.push(byte);
+  }
+  return bytes;
+}
+
+/**
+ * @param {any} parsed
+ * @returns {boolean}
+ */
+function isAuthRejected(parsed) {
+  const statusCode = parsed?.message?.header?.status_code;
+  return statusCode === 401 || statusCode === 403;
+}
+
+/**
+ * @returns {SigningSecret | null}
+ */
+function readCachedSecret() {
+  try {
+    if (
+      typeof GLib?.get_user_cache_dir !== 'function' ||
+      typeof GLib?.file_get_contents !== 'function'
+    ) {
+      return null;
+    }
+    const userCacheDir = GLib.get_user_cache_dir();
+    if (!userCacheDir) {
+      return null;
+    }
+    const secretFile = GLib.build_filenamev([userCacheDir, 'lyricbar', 'musixmatch-secret.json']);
+    const [ok, contents] = GLib.file_get_contents(secretFile);
+    if (!ok || !contents) {
+      return null;
+    }
+    const parsed = JSON.parse(readBytes(contents));
+    if (
+      typeof parsed?.secret === 'string' &&
+      parsed.secret !== '' &&
+      typeof parsed?.savedAt === 'number'
+    ) {
+      return Object.freeze({
+        secret: parsed.secret,
+        version: typeof parsed.version === 'string' ? parsed.version : null,
+        savedAt: parsed.savedAt,
+      });
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {SigningSecret} secret
+ * @returns {void}
+ */
+function writeCachedSecret(secret) {
+  try {
+    if (
+      typeof GLib?.get_user_cache_dir !== 'function' ||
+      typeof GLib?.file_set_contents !== 'function'
+    ) {
+      return;
+    }
+    const userCacheDir = GLib.get_user_cache_dir();
+    if (!userCacheDir) {
+      return;
+    }
+    const dir = GLib.build_filenamev([userCacheDir, 'lyricbar']);
+    if (typeof GLib.mkdir_with_parents === 'function') {
+      GLib.mkdir_with_parents(dir, 0o755);
+    }
+    const secretFile = GLib.build_filenamev([dir, 'musixmatch-secret.json']);
+    const payload = JSON.stringify({
+      secret: secret.secret,
+      version: secret.version,
+      savedAt: secret.savedAt,
+    });
+    GLib.file_set_contents(secretFile, new TextEncoder().encode(payload));
+  } catch {
+    // Silently ignore write failures
+  }
 }
 
 /**
@@ -359,16 +784,22 @@ function readBytes(bytes) {
   if (bytes === null || bytes === undefined) {
     return '';
   }
+  // GLib.file_get_contents returns a Uint8Array; Soup returns GBytes.
+  if (bytes instanceof Uint8Array) {
+    return new TextDecoder('utf-8').decode(bytes);
+  }
   const candidate = /** @type {{ get_data?: unknown, toArray?: unknown }} */ (bytes);
   if (typeof candidate.get_data === 'function') {
     const raw = /** @type {{ get_data: () => unknown }} */ (candidate).get_data();
     if (raw === null || raw === undefined) {
       return '';
     }
-    const decoder = new TextDecoder('utf-8');
-    return decoder.decode(/** @type {Uint8Array} */ (raw));
+    return new TextDecoder('utf-8').decode(/** @type {Uint8Array} */ (raw));
   }
-  return String(bytes);
+  if (typeof candidate.toArray === 'function') {
+    return new TextDecoder('utf-8').decode(candidate.toArray());
+  }
+  return '';
 }
 
 /**
@@ -392,88 +823,4 @@ function describeError(value) {
     return value.message;
   }
   return String(value);
-}
-
-/**
- * @returns {string | null}
- */
-function readCachedToken() {
-  try {
-    if (
-      typeof GLib?.get_user_cache_dir !== 'function' ||
-      typeof GLib?.file_get_contents !== 'function'
-    ) {
-      return null;
-    }
-    const userCacheDir = GLib.get_user_cache_dir();
-    if (!userCacheDir) {
-      return null;
-    }
-    const tokenFile = GLib.build_filenamev([userCacheDir, 'lyricbar', 'musixmatch-token.json']);
-    const [ok, contents] = GLib.file_get_contents(tokenFile);
-    if (!ok || !contents) {
-      return null;
-    }
-    const decoder = new TextDecoder('utf-8');
-    const raw = readBytes(contents);
-    const parsed = JSON.parse(raw || decoder.decode(/** @type {Uint8Array} */ (contents)));
-    if (
-      typeof parsed?.token === 'string' &&
-      parsed.token !== '' &&
-      !parsed.token.includes('UpgradeOnly')
-    ) {
-      return parsed.token;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * @param {string} token
- * @returns {void}
- */
-function writeCachedToken(token) {
-  try {
-    if (
-      typeof GLib?.get_user_cache_dir !== 'function' ||
-      typeof GLib?.file_set_contents !== 'function'
-    ) {
-      return;
-    }
-    const userCacheDir = GLib.get_user_cache_dir();
-    if (!userCacheDir) {
-      return;
-    }
-    const dir = GLib.build_filenamev([userCacheDir, 'lyricbar']);
-    if (typeof GLib.mkdir_with_parents === 'function') {
-      GLib.mkdir_with_parents(dir, 0o755);
-    }
-    const tokenFile = GLib.build_filenamev([dir, 'musixmatch-token.json']);
-    const payload = JSON.stringify({ token, savedAt: Date.now() });
-    const encoder = new TextEncoder();
-    GLib.file_set_contents(tokenFile, encoder.encode(payload));
-  } catch {
-    // Silently ignore write failures
-  }
-}
-
-/**
- * @returns {void}
- */
-function deleteCachedToken() {
-  try {
-    if (typeof GLib?.get_user_cache_dir !== 'function' || typeof GLib?.unlink !== 'function') {
-      return;
-    }
-    const userCacheDir = GLib.get_user_cache_dir();
-    if (!userCacheDir) {
-      return;
-    }
-    const tokenFile = GLib.build_filenamev([userCacheDir, 'lyricbar', 'musixmatch-token.json']);
-    GLib.unlink(tokenFile);
-  } catch {
-    // Silently ignore
-  }
 }

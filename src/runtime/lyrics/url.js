@@ -59,6 +59,23 @@ export function buildLrclibSearchUrl(query) {
 }
 
 /**
+ * Title-only search for when the player's artist spelling disagrees with
+ * LRCLIB's records (transliterations, traditional vs simplified Chinese,
+ * featuring variants). Callers must score the results strictly.
+ *
+ * @param {LyricsQuery} query
+ * @returns {string | null}
+ */
+export function buildLrclibTitleSearchUrl(query) {
+  const title = normalizeSearchTitle(query.title);
+  if (title === '') {
+    return null;
+  }
+
+  return `${SEARCH_ENDPOINT}?${encodeFormQuery([['track_name', title]])}`;
+}
+
+/**
  * @param {string | null | undefined} value
  * @returns {string}
  */

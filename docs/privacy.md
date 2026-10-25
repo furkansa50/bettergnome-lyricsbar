@@ -20,13 +20,14 @@ This data is already broadcast locally on your desktop by the active media playe
 
 To look up and synchronize live lyrics, Better Lyrics Bar queries public lyrics providers based on the user's configuration:
 
-### 1. Musixmatch Open Desktop API
+### 1. Musixmatch Web API (signed)
 
-- **Endpoint**: `https://apic-desktop.musixmatch.com/ws/1.1/`
+- **Endpoint**: `https://www.musixmatch.com/ws/1.1/`
 - **Requests**:
-  - `token.get`: Requests an anonymous session token for query signing.
-  - `macro.subtitles.get`: Requests word-by-word `RichSync` timestamps and standard synced subtitles.
-- **Transmitted Data**: Track title, artist name, and duration.
+  - `track.search`: Searches the Musixmatch catalogue for the playing track.
+  - `track.subtitles.get` / `track.lyrics.get`: Request line-synced `LRC` subtitles or plain lyrics.
+- **Request Signing**: Every request carries an HMAC-SHA256 signature computed with a key read from musixmatch.com's own public website bundle (no anonymous tokens exist anymore).
+- **Transmitted Data**: Track title, artist name, and duration, plus the user's own Musixmatch login token. The token is provided by the user (copied from their logged-in musixmatch.com session), stored locally in GSettings, and only ever sent to `www.musixmatch.com`.
 
 ### 2. Better Lyrics API
 

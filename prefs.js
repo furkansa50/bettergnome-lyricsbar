@@ -507,6 +507,38 @@ export default class LyricBarPreferences extends ExtensionPreferences {
 
     behaviorGroup.add(lyricsSourceRow);
 
+    // musixmatch-token: EntryRow in its own group — AdwEntryRow has no
+    // subtitle of its own, so the explanation lives in the group description.
+    const musixmatchTokenRow = new Adw.EntryRow({
+      title: _t('Musixmatch login token', 'Musixmatch oturum token'),
+      show_apply_button: true,
+    });
+    musixmatchTokenRow.text = settings.get_string('musixmatch-token');
+    const musixmatchTokenNotifyId = musixmatchTokenRow.connect('notify::text', () => {
+      const text = musixmatchTokenRow.text.trim();
+      if (text !== settings.get_string('musixmatch-token')) {
+        settings.set_string('musixmatch-token', text);
+      }
+    });
+    connections.push([musixmatchTokenRow, musixmatchTokenNotifyId]);
+
+    const musixmatchTokenChangedId = settings.connect('changed::musixmatch-token', () => {
+      const current = settings.get_string('musixmatch-token');
+      if (musixmatchTokenRow.text !== current) {
+        musixmatchTokenRow.text = current;
+      }
+    });
+    connections.push([settings, musixmatchTokenChangedId]);
+
+    const musixmatchTokenGroup = new Adw.PreferencesGroup({
+      title: _t('Musixmatch account', 'Musixmatch hesabı'),
+      description: _t(
+        'Required for the Musixmatch source. Log in at musixmatch.com, then copy the musixmatchUserToken cookie (or just the token) from the browser devtools and paste it here.',
+        'Musixmatch kaynağı için gerekli. musixmatch.com’a giriş yapıp tarayıcı geliştirici araçlarındaki musixmatchUserToken çerezini (veya yalnızca token’ı) buraya yapıştırın.',
+      ),
+    });
+    musixmatchTokenGroup.add(musixmatchTokenRow);
+
     // sync-offset-ms: SpinRow
     const syncOffsetRow = new Adw.SpinRow({
       title: _t('Lyrics sync offset (ms)', 'Şarkı sözü senkron ofseti (ms)'),
@@ -712,6 +744,7 @@ export default class LyricBarPreferences extends ExtensionPreferences {
     page.add(displayGroup);
     page.add(appearanceGroup);
     page.add(behaviorGroup);
+    page.add(musixmatchTokenGroup);
     page.add(debuggingGroup);
     page.add(aboutGroup);
 

@@ -18,7 +18,7 @@ Better Lyrics Bar adds a compact, auto-sizing lyric display to the GNOME top bar
 
 1. **Word-by-Word Live Synchronization**: Delivers real-time syllable and word timing with smooth transitions and glowing highlight effects.
 2. **Multi-Tier Provider Pipeline**:
-   - **Musixmatch Open Desktop API**: Highest precision word-timing data via RichSync and LRC formats.
+   - **Musixmatch Web API**: Line-synced LRC and plain lyrics via the signed musixmatch.com endpoint (requires the user's Musixmatch login token).
    - **Better Lyrics API**: Community-curated synced lyrics in RichSync and TTML format.
    - **LRCLIB**: Fast, keyless open-source fallback for line-synced and plain text lyrics.
 3. **Dynamic Auto-Width**: The top-bar indicator smoothly resizes to fit current lyrics without clipping or layout jitter.

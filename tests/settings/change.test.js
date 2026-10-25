@@ -20,6 +20,15 @@ describe('shouldRefreshLyricsQuery', () => {
       ),
     ).toBe(true);
   });
+
+  it('returns true when the musixmatch token changes', () => {
+    expect(
+      shouldRefreshLyricsQuery(
+        { ...settings(['spotify']), musixmatchToken: '' },
+        { ...settings(['spotify']), musixmatchToken: 'AbCdEf1234567890abcdEFgh' },
+      ),
+    ).toBe(true);
+  });
 });
 
 describe('shouldRefreshPlayerSelection', () => {
@@ -101,6 +110,7 @@ function settings(playerPriority, overrides = {}) {
     playerPriority,
     browserPlayerService: 'spotify',
     lyricsSource: 'musixmatch',
+    musixmatchToken: '',
     cacheEnabled: true,
     debugLogging: false,
     textColorMode: 'default',

@@ -1,5 +1,6 @@
 import {
   parseBestSyncedLrclibSearchResponse,
+  parseBestSyncedLrclibTitleSearchResponse,
   parseLrclibResponse,
 } from '../../domain/lyrics/provider-result.js';
 
@@ -68,6 +69,16 @@ export function mapHttpResultToProviderResult(result) {
 export function mapHttpResultToSyncedSearchResult(result, query) {
   const parsed = parseSearchJson(result);
   return parsed === null ? null : parseBestSyncedLrclibSearchResponse(parsed, query);
+}
+
+/**
+ * @param {HttpResult} result
+ * @param {LyricsQuery} query
+ * @returns {LyricsProviderResult | null}
+ */
+export function mapHttpResultToSyncedTitleSearchResult(result, query) {
+  const parsed = parseSearchJson(result);
+  return parsed === null ? null : parseBestSyncedLrclibTitleSearchResponse(parsed, query);
 }
 
 /**

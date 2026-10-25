@@ -19,7 +19,8 @@ import { shouldIgnoreAppleMusicDuration } from './duration-policy.js';
  * }>} CacheDecisionOptions
  */
 
-export const CACHE_SCHEMA_VERSION = 3;
+// Version 4 invalidates provider results accepted before matched-track validation.
+export const CACHE_SCHEMA_VERSION = 4;
 export const POSITIVE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const NEGATIVE_TTL_MS = 6 * 60 * 60 * 1000;
 
@@ -56,7 +57,9 @@ export function buildCacheEntry(result, now) {
  * Decides whether a provider result should be persisted. Browser MPRIS can emit
  * short-lived non-track metadata, so low-confidence browser misses must not
  * poison the negative cache. Positive results remain cacheable because the
- * provider already found a usable lyric payload.
+ * provider already found a usable lyric payload. Transport errors are never
+ * cached: they are transient (timeouts, flaky proxies) and pinning one for the
+ * negative TTL would leave the track without lyrics long after recovery.
  *
  * @param {PlayerSnapshot | null | undefined} player
  * @param {LyricsProviderResult} result
@@ -64,6 +67,10 @@ export function buildCacheEntry(result, now) {
  * @returns {boolean}
  */
 export function shouldWriteLyricsCache(player, result, options = {}) {
+  if (result.kind === 'error') {
+    return false;
+  }
+
   if (result.kind !== 'not-found') {
     return true;
   }

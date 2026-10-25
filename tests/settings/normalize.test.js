@@ -4,6 +4,7 @@ import {
   normalizeFallbackMode,
   normalizeBrowserPlayerService,
   normalizeMaxWidth,
+  normalizeMusixmatchToken,
   normalizePanelPosition,
   normalizePlayerPriority,
   normalizeSettings,
@@ -28,6 +29,7 @@ describe('normalizeSettings', () => {
         playerPriority: ['spotify', 'firefox'],
         browserPlayerService: 'generic',
         lyricsSource: 'better-lyrics',
+        musixmatchToken: 'AbCdEf1234567890abcdEFgh',
         cacheEnabled: false,
         debugLogging: true,
         textColorMode: 'custom',
@@ -47,6 +49,7 @@ describe('normalizeSettings', () => {
       playerPriority: ['spotify', 'firefox'],
       browserPlayerService: 'generic',
       lyricsSource: 'better-lyrics',
+      musixmatchToken: 'AbCdEf1234567890abcdEFgh',
       cacheEnabled: false,
       debugLogging: true,
       textColorMode: 'custom',
@@ -69,6 +72,7 @@ describe('normalizeSettings', () => {
         playerPriority: 'spotify',
         browserPlayerService: 'bad',
         lyricsSource: 'unknown-source',
+        musixmatchToken: 'not a token at all!!',
         cacheEnabled: 'yes',
         debugLogging: 'no',
         textColorMode: 'orange',
@@ -86,6 +90,7 @@ describe('normalizeSettings', () => {
       playerPriority: ['spotify'],
       browserPlayerService: 'auto',
       lyricsSource: 'musixmatch',
+      musixmatchToken: '',
       cacheEnabled: true,
       debugLogging: false,
       textColorMode: 'default',
@@ -221,6 +226,43 @@ describe('normalizeLyricsSource', () => {
   it('falls back to musixmatch for unknown values', () => {
     expect(normalizeLyricsSource('unknown')).toBe('musixmatch');
     expect(normalizeLyricsSource(null)).toBe('musixmatch');
+  });
+});
+
+describe('normalizeMusixmatchToken', () => {
+  const token = 'AbCdEf1234567890abcdEFgh';
+
+  it('accepts a bare token', () => {
+    expect(normalizeMusixmatchToken(`  ${token}  `)).toBe(token);
+  });
+
+  it('accepts the url-encoded musixmatchUserToken cookie value', () => {
+    const cookie = encodeURIComponent(
+      JSON.stringify({ tokens: { 'mxm-com-v1.0': token, other: 'short' } }),
+    );
+    expect(normalizeMusixmatchToken(cookie)).toBe(token);
+  });
+
+  it('accepts the plain JSON cookie value', () => {
+    const cookie = JSON.stringify({ tokens: { 'mxm-com-v1.0': token } });
+    expect(normalizeMusixmatchToken(cookie)).toBe(token);
+  });
+
+  it('accepts an HTML snippet embedding userToken', () => {
+    expect(
+      normalizeMusixmatchToken(`..."auth":{"appId":"mxm-com-v1.0","userToken":"${token}"}...`),
+    ).toBe(token);
+  });
+
+  it('rejects the all-zeros dummy token', () => {
+    expect(normalizeMusixmatchToken('0'.repeat(58))).toBe('');
+  });
+
+  it('rejects unrelated text and empty input', () => {
+    expect(normalizeMusixmatchToken('UpgradeOnly')).toBe('');
+    expect(normalizeMusixmatchToken('hello world, not a token')).toBe('');
+    expect(normalizeMusixmatchToken('   ')).toBe('');
+    expect(normalizeMusixmatchToken(undefined)).toBe('');
   });
 });
 

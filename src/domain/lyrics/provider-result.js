@@ -105,6 +105,78 @@ export function parseBestSyncedLrclibSearchResponse(value, query) {
   return best?.result ?? null;
 }
 
+// Title-only search results contain same-title songs by other artists, so the
+// duration window has to stay tight enough to tell different recordings apart.
+const TITLE_ONLY_DURATION_TOLERANCE_MS = 10000;
+
+/**
+ * Scores a title-only search response: the artist spelling is known to
+ * disagree (transliterations, traditional vs simplified Chinese, featuring
+ * variants), so matching relies on an exact normalized title plus a tight
+ * duration window to keep wrong same-title songs out.
+ *
+ * @param {unknown} value
+ * @param {LyricsQuery} query
+ * @returns {LyricsProviderResult | null}
+ */
+export function parseBestSyncedLrclibTitleSearchResponse(value, query) {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  /** @type {{ score: number, result: Extract<LyricsProviderResult, { kind: 'synced' }> } | null} */
+  let best = null;
+
+  for (const item of value) {
+    const result = parseLrclibResponse(item);
+    if (result.kind !== 'synced') {
+      continue;
+    }
+
+    const score = scoreTitleOnlySearchResult(result.track, query);
+    if (score === null) {
+      continue;
+    }
+
+    if (best === null || score > best.score) {
+      best = { score, result };
+    }
+  }
+
+  return best?.result ?? null;
+}
+
+/**
+ * @param {ProviderTrackInfo} track
+ * @param {LyricsQuery} query
+ * @returns {number | null}
+ */
+function scoreTitleOnlySearchResult(track, query) {
+  const queryTitle = normalizeComparable(stripParentheticalSuffix(query.title));
+  const resultTitle = normalizeComparable(stripParentheticalSuffix(track.trackName));
+  if (queryTitle === '' || resultTitle === '' || queryTitle !== resultTitle) {
+    return null;
+  }
+
+  if (
+    typeof track.durationMs !== 'number' ||
+    !Number.isFinite(track.durationMs) ||
+    typeof query.durationMs !== 'number' ||
+    !Number.isFinite(query.durationMs)
+  ) {
+    // Without a comparable duration a same-title song cannot be told apart
+    // from the requested recording, so do not guess.
+    return null;
+  }
+
+  const deltaMs = Math.abs(track.durationMs - query.durationMs);
+  if (deltaMs > TITLE_ONLY_DURATION_TOLERANCE_MS) {
+    return null;
+  }
+
+  return 100 + Math.max(0, 30 - Math.round(deltaMs / 300));
+}
+
 /**
  * @param {ProviderTrackInfo} track
  * @param {LyricsQuery} query
@@ -156,8 +228,14 @@ function scoreDuration(resultDurationMs, queryDurationMs) {
   }
 
   const deltaMs = Math.abs(resultDurationMs - queryDurationMs);
-  if (deltaMs > 3000) {
+  // This is the fuzzy search fallback: artist and title already matched, so a
+  // moderate duration gap only means a different release of the same song.
+  // Reject only clearly different recordings (edit vs extended, live sets).
+  if (deltaMs > 30000) {
     return null;
+  }
+  if (deltaMs > 3000) {
+    return 0;
   }
 
   return Math.max(0, 30 - Math.round(deltaMs / 100));
@@ -206,12 +284,15 @@ function normalizeComparable(value) {
     return '';
   }
 
+  // Keep letters and digits from every script: stripping to ASCII would
+  // reduce any CJK title/artist to an empty string and silently disable the
+  // whole search fallback for Chinese, Japanese and Korean songs.
   return value
     .normalize('NFKD')
     .toLowerCase()
     .replace(/[\u0300-\u036f]/gu, '')
     .replace(/&/gu, ' and ')
-    .replace(/[^a-z0-9]+/gu, ' ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim()
     .replace(/\s+/gu, ' ');
 }
